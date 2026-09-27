@@ -63,7 +63,7 @@ export function registerCaTools(api: any, getClient: ClientResolver): void {
   api.registerTool({
     name: "unraid_ca_install",
     description:
-      "Install a Community Applications app on the Unraid server using its template defaults. Writes an Unraid docker-manager template and has Unraid create and start the container, so it appears on the Docker tab like any other app. Required fields with no default must be supplied in overrides; call unraid_ca_app first to see them. Pass dryRun=true to get the resolved template and a preview of the docker command without changing anything. Refuses apps whose templates need unsupported or unsafe options rather than installing something different from the template.",
+      "Install a Community Applications app on the Unraid server using its template defaults. Writes an Unraid docker-manager template and has Unraid create and start the container, so it appears on the Docker tab like any other app. Required fields with no default must be supplied in overrides; call unraid_ca_app first to see them. Pass dryRun=true to get the resolved template and a preview of the docker command without changing anything. Refuses apps whose templates need unsupported or unsafe options rather than installing something different from the template. If it refuses because the template needs privileged mode, Extra Parameters, Post Arguments, host devices or a custom network such as br0, pass full=true to install it with every setting the template asks for, the way the Docker tab would; that also needs the Edit & Rebuild permission. A full install can take settings such as {\"Network\": \"br0\", \"MyIP\": \"192.168.1.60\"}. Tailscale templates and templates with extra networks are still refused. Always dry-run a full install first and tell the user what the container will be allowed to do.",
     parameters: {
       type: "object",
       properties: {
@@ -84,6 +84,15 @@ export function registerCaTools(api: any, getClient: ClientResolver): void {
           type: "boolean",
           description: "Resolve and validate everything and return the plan without installing (default: false)",
         },
+        full: {
+          type: "boolean",
+          description: "Install with every setting the template asks for, including privileged mode, Extra Parameters, host devices and custom networks (default: false). Needs the Edit & Rebuild permission.",
+        },
+        settings: {
+          type: "object",
+          additionalProperties: { type: "string" },
+          description: "Full installs only: template settings to set, the same keys unraid_template_edit takes, e.g. {\"Network\": \"br0\", \"MyIP\": \"192.168.1.60\"}.",
+        },
         server: { type: "string", description: "Target server name (optional, uses default server)" },
       },
       required: ["name"],
@@ -91,12 +100,17 @@ export function registerCaTools(api: any, getClient: ClientResolver): void {
     },
     execute: async (_id: string, params: Record<string, unknown>) => {
       try {
-        checkParams(params, ["name", "repo", "containerName", "overrides", "dryRun", "server"]);
+        checkParams(params, ["name", "repo", "containerName", "overrides", "dryRun", "full", "settings", "server"]);
+        if (params.full !== undefined && typeof params.full !== "boolean") {
+          throw new Error(`"full" must be true or false, not ${JSON.stringify(params.full)}. Nothing was sent to the server.`);
+        }
         const body: Record<string, unknown> = {};
         if (params.repo) body.repo = params.repo;
         if (params.containerName) body.name = params.containerName;
         if (params.overrides) body.overrides = params.overrides;
         if (params.dryRun !== undefined) body.dryRun = params.dryRun;
+        if (params.full !== undefined) body.full = params.full;
+        if (params.settings !== undefined) body.settings = params.settings;
         return textResult(
           await getClient(params.server as string | undefined).post(
             `/api/ca/app/${encodeURIComponent(String(params.name))}/install`,

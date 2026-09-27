@@ -135,6 +135,8 @@ Once installed and configured, ask your agent:
 | Users | `unraid_user_me` |
 | Logs | `unraid_syslog` |
 
+`unraid_ca_install` takes `full: true` to install an app with every setting its template asks for, including privileged mode, Extra Parameters, devices and custom networks, plus optional `settings` such as a network and fixed IP. A full install needs the Edit & Rebuild permission.
+
 `unraid_ca_update` and `unraid_ca_remove` act on an installed app, so their `name` is the container's name from the Docker tab, not the app's name in the catalog. Update keeps the configuration saved on the server and restores the running or stopped state; remove deletes the container and leaves appdata, volumes, the image and the template alone. Both take `dryRun`.
 
 `unraid_template_get` reads an installed container's saved settings, and `unraid_template_edit` changes them and rebuilds the container the way the Docker tab's Apply does: ports, paths, variables, labels, devices, network and fixed IP, privileged mode, Extra Parameters and Tailscale. The rebuilt container must start and stay up, or the original comes back and its template is left unchanged. It changes settings, not the app version. It takes `dryRun`.

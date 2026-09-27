@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { Resource, Action } from "@unraidclaw/shared";
+import { Resource, Action, isPermitted } from "@unraidclaw/shared";
 import type {
   CaAppDetail,
   CaInstallRequest,
@@ -11,11 +11,15 @@ import type {
   CaUpdateResponse,
 } from "@unraidclaw/shared";
 import { requirePermission } from "../permissions.js";
+import { getPermissions } from "../config.js";
+import { applyTemplateEdit, parseTemplateSettings } from "../template-edit.js";
 import { CaFeed, CaFeedError, findApps, searchCatalog, toSearchResult, type CaApp } from "../ca-feed.js";
 import {
   CA_NAME_RE,
   CaInstallError,
+  FULL_INSTALL_LIFTS,
   buildPlan,
+  catalogSettings,
   buildTemplateXml,
   computeBlockers,
   hostPaths,
@@ -212,7 +216,7 @@ const REPO_QUERY_SCHEMA = {
   properties: { repo: { type: "string", maxLength: 200 } },
 } as const;
 
-const INSTALL_BODY_FIELDS = ["repo", "name", "overrides", "dryRun"] as const;
+const INSTALL_BODY_FIELDS = ["repo", "name", "overrides", "dryRun", "full", "settings"] as const;
 
 /**
  * Validate the install body ourselves rather than through a JSON schema.
@@ -252,6 +256,13 @@ export function parseInstallBody(raw: unknown): CaInstallRequest {
   }
   if (body.dryRun !== undefined && typeof body.dryRun !== "boolean") {
     fail(`"dryRun" must be true or false, not ${JSON.stringify(body.dryRun)}.`, { field: "dryRun" });
+  }
+  if (body.full !== undefined && typeof body.full !== "boolean") {
+    fail(`"full" must be true or false, not ${JSON.stringify(body.full)}.`, { field: "full" });
+  }
+  if (body.settings !== undefined) {
+    if (body.full !== true) fail('"settings" is only accepted on a full install. Pass "full": true as well.', { field: "settings" });
+    body.settings = parseTemplateSettings(body.settings);
   }
   if (body.overrides !== undefined) {
     if (typeof body.overrides !== "object" || body.overrides === null || Array.isArray(body.overrides)) {
@@ -558,6 +569,12 @@ export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = crea
         const e = err as CaInstallError;
         return sendError(reply, e.statusCode, e.code, e.message, e.details);
       }
+      // A full install writes privileged mode, devices and Extra Parameters,
+      // which is what template:update guards on an installed app. Installing
+      // them must not be the easier way to get them.
+      if (body.full && !isPermitted(getPermissions(), Resource.TEMPLATE, Action.UPDATE)) {
+        return sendError(reply, 403, "FORBIDDEN", `Permission denied: ${Resource.TEMPLATE}:${Action.UPDATE} (a full install needs it as well as ${Resource.CA}:${Action.CREATE})`);
+      }
 
       let cat;
       try {
@@ -599,7 +616,7 @@ export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = crea
       // A caller-supplied name clears only the template's own unsafe-name
       // blocker; every other refusal still stands.
       const blockers = computeBlockers(app_, env).filter(
-        (b) => !(b.code === "CA_UNSAFE_NAME" && body.name !== undefined)
+        (b) => !(b.code === "CA_UNSAFE_NAME" && body.name !== undefined) && !(body.full && FULL_INSTALL_LIFTS.has(b.code))
       );
       if (blockers.length > 0) {
         return sendError(
@@ -609,6 +626,36 @@ export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = crea
           `"${app_.name}" cannot be installed through UnraidClaw: ${blockers.map((b) => b.message).join(" ")}`,
           { blockers }
         );
+      }
+
+      // A full install writes the catalog's own settings plus the caller's,
+      // checked like an edit's. The network is taken as written: container
+      // networks are case sensitive, and "container:x" names another app.
+      let fullSettings: Record<string, string> | undefined;
+      let source = app_;
+      if (body.full) {
+        try {
+          fullSettings = parseTemplateSettings({ ...catalogSettings(app_), ...(body.settings ?? {}) }) as Record<string, string>;
+        } catch (err) {
+          const e = err as CaInstallError;
+          return sendError(reply, 422, "CA_INVALID_TEMPLATE", `The template's settings cannot be written as they are: ${e.message}`);
+        }
+        source = { ...app_, raw: { ...app_.raw, Network: fullSettings.Network } };
+        const network = fullSettings.Network;
+        if (!["bridge", "host", "none"].includes(network.toLowerCase()) && !network.startsWith("container:")) {
+          let known: string[] = [];
+          try {
+            const { stdout } = await runtime.run("docker", ["network", "ls", "--format", "{{.Name}}"]);
+            known = stdout.split("\n").map((n) => n.trim()).filter(Boolean);
+          } catch (err) {
+            return sendError(reply, 503, "CA_DOCKER_UNAVAILABLE", `docker could not list its networks: ${(err as Error).message}`);
+          }
+          // Unraid puts a container whose network does not exist on "none",
+          // with no ports and no way to reach it.
+          if (!known.includes(network)) {
+            return sendError(reply, 422, "CA_UNKNOWN_NETWORK", `There is no docker network named "${network}" on this server. Pick one of: ${known.join(", ")}.`, { networks: known });
+          }
+        }
       }
 
       let plan;
@@ -626,7 +673,7 @@ export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = crea
           );
         }
 
-        resolved = resolveTemplate(app_, containerName, overrides);
+        resolved = resolveTemplate(source, containerName, overrides);
         validateResolved(resolved);
       } catch (err) {
         if (err instanceof CaInstallError) {
@@ -636,10 +683,34 @@ export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = crea
       }
 
       const templatePath = join(runtime.templatesDir, `my-${containerName}.xml`);
-      const xml = buildTemplateXml(app_, resolved);
-      plan = buildPlan(app_, resolved, templatePath, xml);
+      let xml = buildTemplateXml(source, resolved);
+      if (fullSettings) {
+        try {
+          xml = applyTemplateEdit(xml, templatePath, { settings: fullSettings }).xml;
+        } catch (err) {
+          const e = err as CaInstallError;
+          return sendError(reply, e.statusCode ?? 500, e.code ?? "CA_INVALID_TEMPLATE", e.message);
+        }
+      }
+      plan = buildPlan(source, resolved, templatePath, xml);
+      if (fullSettings) {
+        plan.full = true;
+        plan.settings = fullSettings;
+      }
 
       const warnings: string[] = [];
+      if (fullSettings) {
+        const extras = [
+          fullSettings.Privileged === "true" ? "privileged mode" : "",
+          fullSettings.ExtraParams ? `Extra Parameters (${fullSettings.ExtraParams})` : "",
+          fullSettings.PostArgs ? `Post Arguments (${fullSettings.PostArgs})` : "",
+          resolved.config.some((c) => c.type === "Device" && c.value.trim() !== "") ? "host devices" : "",
+          fullSettings.MyIP ? `the fixed IP ${fullSettings.MyIP}` : "",
+        ].filter(Boolean);
+        if (extras.length > 0) {
+          warnings.push(`Full install: the container gets ${extras.join(", ")}, as the template asks. dockerCommandPreview leaves these out; templateXml has them, and Unraid builds the command from it.`);
+        }
+      }
       if ((app_.raw.Requires ?? "").trim() !== "") {
         warnings.push(`Template prerequisites from the maintainer: ${app_.raw.Requires}`);
       }

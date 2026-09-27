@@ -49,6 +49,10 @@ Always run it with `dryRun: true` first. Show the user the changes and the comma
 
 This tool changes settings, not the app version. An unchanged image is not pulled, so use `unraid_ca_update` to update an app. Changing `Repository` to another tag pulls that tag.
 
+## Installing apps that need more access
+
+When `unraid_ca_install` refuses an app because its template needs privileged mode, Extra Parameters, Post Arguments, host devices or a custom network such as br0, that is the template asking for more access, not a broken app. Tell the user what the app would get, then offer `full: true`, which installs it the way the Docker tab would and needs the Edit & Rebuild permission. Dry-run it first and read the settings in the plan back to the user. To put the app on a custom network with a fixed IP, pass `settings: {"Network": "br0", "MyIP": "..."}`. Tailscale templates and templates with extra networks are still refused; point the user to the Docker tab for those.
+
 ## Changing things inside an app
 
 Many requests are about an app's own data, not its container: add an album in Immich, a proxy host in Nginx Proxy Manager, a series in Sonarr. Use `unraid_app_request` for those, with the installed container name and a path from the app's API documentation. Never pass a host or ask for a URL: the server finds the container itself.

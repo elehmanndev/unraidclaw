@@ -142,6 +142,32 @@ function checkEntryShape(type: CaConfigType, target: string, value: string | und
 }
 
 /**
+ * Check a set of template settings, as an edit or a full install passes them.
+ * Every key must be one an edit may set, and every value plain text.
+ */
+export function parseTemplateSettings(raw: unknown): Partial<Record<TemplateSettingKey, string>> {
+  const settings = checkObject(raw, '"settings"');
+  const out: Partial<Record<TemplateSettingKey, string>> = {};
+  for (const [key, value] of Object.entries(settings)) {
+    if (!SETTING_SET.has(key)) {
+      if (key === "Name") invalid('"settings.Name" cannot be set here: the container name is how the container and its template are found. Renaming is not supported.');
+      const near = SETTING_KEYS.find((k) => k.toLowerCase() === key.toLowerCase());
+      invalid(
+        near ? `Unknown setting "${key}". Did you mean "${near}"?` : `Unknown setting "${key}". Settable: ${SETTING_KEYS.join(", ")}.`,
+        { field: key }
+      );
+    }
+    const text = checkString(value, `"settings.${key}"`);
+    if (BOOLEAN_SETTINGS.has(key) && text !== "true" && text !== "false") {
+      invalid(`"settings.${key}" must be "true" or "false".`);
+    }
+    if (key === "Repository" && text.trim() === "") invalid('"settings.Repository" cannot be empty: it names the image.');
+    out[key as TemplateSettingKey] = text;
+  }
+  return out;
+}
+
+/**
  * Read an edit request by hand, as the other mutating bodies are.
  *
  * Unknown fields are refused rather than ignored, so a typo in a setting name
@@ -154,26 +180,7 @@ export function parseTemplateEditBody(raw: unknown): TemplateEditRequest {
 
   if (body.dryRun !== undefined) out.dryRun = checkBoolean(body.dryRun, '"dryRun"');
 
-  if (body.settings !== undefined) {
-    const settings = checkObject(body.settings, '"settings"');
-    out.settings = {};
-    for (const [key, value] of Object.entries(settings)) {
-      if (!SETTING_SET.has(key)) {
-        if (key === "Name") invalid('"settings.Name" cannot be edited: the name is how the container and its template are found. Renaming is not supported.');
-        const near = SETTING_KEYS.find((k) => k.toLowerCase() === key.toLowerCase());
-        invalid(
-          near ? `Unknown setting "${key}". Did you mean "${near}"?` : `Unknown setting "${key}". Settable: ${SETTING_KEYS.join(", ")}.`,
-          { field: key }
-        );
-      }
-      const text = checkString(value, `"settings.${key}"`);
-      if (BOOLEAN_SETTINGS.has(key) && text !== "true" && text !== "false") {
-        invalid(`"settings.${key}" must be "true" or "false".`);
-      }
-      if (key === "Repository" && text.trim() === "") invalid('"settings.Repository" cannot be empty: it names the image.');
-      out.settings[key as TemplateSettingKey] = text;
-    }
-  }
+  if (body.settings !== undefined) out.settings = parseTemplateSettings(body.settings);
 
   if (body.config !== undefined) {
     if (!Array.isArray(body.config)) invalid('"config" must be a list.');

@@ -287,6 +287,40 @@ export function computeBlockers(app: CaApp, env: TemplateEnv): CaBlocker[] {
   return blockers;
 }
 
+/**
+ * Refusals a full install lifts. Each is a setting the template asks for that
+ * the plain install cannot write, and that Unraid's docker manager reproduces
+ * exactly once it is in the template. What stays refused on a full install is
+ * what rebuild_container itself would get wrong: Tailscale (its hook needs the
+ * image's entrypoint, which only the Docker tab's form adds), extra networks
+ * (connected only by the form), memory limits on Unraid before 7.4, and
+ * templates this module cannot read at all.
+ */
+export const FULL_INSTALL_LIFTS: ReadonlySet<string> = new Set([
+  "CA_EXTRA_PARAMS",
+  "CA_POST_ARGS",
+  "CA_PRIVILEGED",
+  "CA_CUSTOM_MAC",
+  "CA_DEVICE_PASSTHROUGH",
+  "CA_UNSUPPORTED_NETWORK",
+]);
+
+/**
+ * The settings a full install copies from the catalog into the template, on
+ * top of what the plain install writes. Only settings the template actually
+ * uses are returned, as the text Unraid reads back.
+ */
+export function catalogSettings(app: CaApp): Record<string, string> {
+  const raw = app.raw;
+  const out: Record<string, string> = { Network: String(raw.Network ?? "bridge").trim() || "bridge" };
+  if (String(raw.Privileged ?? "").toLowerCase() === "true") out.Privileged = "true";
+  for (const key of ["ExtraParams", "PostArgs", "CPUset", "MyMAC"] as const) {
+    const value = String(raw[key] ?? "").trim();
+    if (value !== "") out[key] = value;
+  }
+  return out;
+}
+
 /** Required fields whose effective value is empty, so the caller must supply one. */
 export function missingRequired(config: CaConfigEntry[], overrides: Map<string, string>): string[] {
   const out: string[] = [];
@@ -487,6 +521,12 @@ export function validateResolved(resolved: ResolvedTemplate): void {
     } else if (c.type === "Variable") {
       if (!ENV_NAME_RE.test(c.target)) {
         fail(`Environment variable name "${c.target}" is not valid.`);
+      }
+    } else if (c.type === "Device") {
+      // Only reachable on a full install. Unraid passes the value to
+      // --device= quoted, so all that matters is that it names a device.
+      if (!c.value.startsWith("/dev/")) {
+        fail(`Device for "${c.name || c.target}" must be a path under /dev/, got "${c.value}".`);
       }
     }
   }
