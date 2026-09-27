@@ -73,7 +73,7 @@ test("this repo's own plugin file parses, with every entity resolved", async () 
   const plugin = doc.PLUGIN as Record<string, unknown>;
   assert.equal(attrOf(plugin, "name"), "unraidclaw");
   assert.match(attrOf(plugin, "version"), /^\d+\.\d+\.\d+$/);
-  assert.match(attrOf(plugin, "pluginURL"), /^https:\/\/raw\.githubusercontent\.com\/emaspa\/unraidclaw\//);
+  assert.match(attrOf(plugin, "pluginURL"), /^https:\/\/raw\.githubusercontent\.com\/elehmanndev\/unraidclaw\//);
   assert.ok(!JSON.stringify(plugin).includes("&name;"), "no reference is left unexpanded");
   assert.ok(asArray(plugin.FILE).length > 0);
 });
