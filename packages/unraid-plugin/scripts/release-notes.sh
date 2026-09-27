@@ -35,8 +35,8 @@ cat <<SECTION
 
 ## Install and downloads
 
-- **Unraid plugin**: update from the Unraid WebGUI (Plugins > Check for Updates) or install through Community Applications. \`unraidclaw-${VERSION}-x86_64-1.txz\` is the package the WebGUI downloads; you do not need to fetch it by hand.
-- **CLI**: \`npm install -g unraidclaw-cli\`, or download \`unraidclaw-cli-${VERSION}.tar.gz\` for machines without npm. Verify it with the \`.sha256\` file, extract it, and make sure Node.js 22 or newer is on \`PATH\`. Runs on Linux, macOS and Windows; see the [CLI guide](https://github.com/emaspa/unraidclaw/blob/main/packages/cli/README.md).
-- **OpenClaw plugin**: see [OpenClaw plugin](https://github.com/emaspa/unraidclaw#openclaw-plugin) in the README for install and update commands.
+- **Unraid plugin**: update from the Unraid WebGUI (Plugins > Check for Updates), or install it with Plugins > Install Plugin from \`https://raw.githubusercontent.com/elehmanndev/unraidclaw/main/packages/unraid-plugin/unraidclaw.plg\`. The Community Applications listing installs the original UnraidClaw, not this fork. \`unraidclaw-${VERSION}-x86_64-1.txz\` is the package the WebGUI downloads; you do not need to fetch it by hand.
+- **CLI**: download \`unraidclaw-cli-${VERSION}.tar.gz\`. The npm package \`unraidclaw-cli\` is the original UnraidClaw's and does not have this fork's tools. Verify it with the \`.sha256\` file, extract it, and make sure Node.js 22 or newer is on \`PATH\`. Runs on Linux, macOS and Windows; see the [CLI guide](https://github.com/elehmanndev/unraidclaw/blob/main/packages/cli/README.md).
+- **OpenClaw plugin**: see [OpenClaw plugin](https://github.com/elehmanndev/unraidclaw#openclaw-plugin) in the README for install and update commands.
 - **Checksums**: the \`.md5\` file covers the \`.txz\` package and the \`.sha256\` file covers the CLI archive.
 SECTION

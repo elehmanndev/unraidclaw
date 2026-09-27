@@ -1,6 +1,6 @@
 {
   "name": "unraidclaw-cli",
-  "version": "0.1.34",
+  "version": "0.2.0",
   "private": false,
   "description": "Command-line client for the UnraidClaw gateway",
   "keywords": [
@@ -12,10 +12,10 @@
     "vm"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/emaspa/unraidclaw/tree/main/packages/cli#readme",
+  "homepage": "https://github.com/elehmanndev/unraidclaw/tree/main/packages/cli#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/emaspa/unraidclaw.git",
+    "url": "git+https://github.com/elehmanndev/unraidclaw.git",
     "directory": "packages/cli"
   },
   "bugs": {

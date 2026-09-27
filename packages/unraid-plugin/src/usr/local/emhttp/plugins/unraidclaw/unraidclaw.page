@@ -45,8 +45,9 @@ $certificateReadable = $certificate['present'] && !isset($certificate['error']);
   <div class="occ-header">
     <h2>UnraidClaw</h2>
     <p>AI Agent Gateway for Unraid<?=$pluginVersion ? " &middot; v{$pluginVersion}" : ''?> &middot;
-      <a href="https://github.com/emaspa/unraidclaw" target="_blank" style="color:#6cabec;">GitHub</a> &middot;
-      <a href="https://buymeacoffee.com/emaspa" target="_blank" style="color:#6cabec;">Buy me a coffee</a>
+      <a href="https://github.com/elehmanndev/unraidclaw" target="_blank" style="color:#6cabec;">GitHub</a> &middot;
+      based on <a href="https://github.com/emaspa/unraidclaw" target="_blank" style="color:#6cabec;">UnraidClaw by emaspa</a> &middot;
+      <a href="https://buymeacoffee.com/emaspa" target="_blank" style="color:#6cabec;">Buy emaspa a coffee</a>
     </p>
   </div>
 
@@ -297,6 +298,23 @@ $certificateReadable = $certificate['present'] && !isset($certificate['error']);
         <label class="occ-perm-item"><input type="checkbox" name="ca:create" data-category="ca" <?=!empty($permissions['ca:create']) ? 'checked' : ''?>><span class="occ-perm-label">Install</span><span class="occ-perm-desc">Install a CA app as a new Docker container</span></label>
         <label class="occ-perm-item"><input type="checkbox" name="ca:update" data-category="ca" <?=!empty($permissions['ca:update']) ? 'checked' : ''?>><span class="occ-perm-label">Update</span><span class="occ-perm-desc">Pull a newer image for an installed app and recreate it from its saved template</span></label>
         <label class="occ-perm-item occ-destructive"><input type="checkbox" name="ca:delete" data-category="ca" <?=!empty($permissions['ca:delete']) ? 'checked' : ''?>><span class="occ-perm-label">Remove</span><span class="occ-perm-desc">Remove an installed app's container, keeping its template, image, volumes and appdata (destructive)</span></label>
+      </div>
+    </div>
+
+    <!-- Container Settings -->
+    <div class="occ-perm-category">
+      <div class="occ-perm-header" onclick="occToggleCategory(this)">
+        <span class="occ-expand-icon">&#9654;</span>
+        <h3>Container Settings</h3>
+        <span class="occ-perm-summary" data-category="template"></span>
+        <div class="occ-cat-toggle">
+          <button type="button" class="occ-btn occ-btn-xs" onclick="event.stopPropagation(); occSetCategory('template', true)">All</button>
+          <button type="button" class="occ-btn occ-btn-xs" onclick="event.stopPropagation(); occSetCategory('template', false)">None</button>
+        </div>
+      </div>
+      <div class="occ-perm-body" style="display:none;">
+        <label class="occ-perm-item"><input type="checkbox" name="template:read" data-category="template" <?=!empty($permissions['template:read']) ? 'checked' : ''?>><span class="occ-perm-label">View Settings</span><span class="occ-perm-desc">Read an installed container's saved template, with masked values hidden</span></label>
+        <label class="occ-perm-item occ-destructive"><input type="checkbox" name="template:update" data-category="template" <?=!empty($permissions['template:update']) ? 'checked' : ''?>><span class="occ-perm-label">Edit &amp; Rebuild</span><span class="occ-perm-desc">Change any setting in an installed container's saved template, including privileged mode, devices, Extra Parameters and custom networks, and rebuild the container from it the way the Docker tab does (destructive)</span></label>
       </div>
     </div>
 
