@@ -14,6 +14,8 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://github.com/elehmanndev/unraidclaw" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
 
 <CHANGES>
+### 0.2.5
+- Add compose stacks: list Docker Compose stacks with their services, read their compose files with secrets hidden, start, stop and restart any stack, and edit, pull and redeploy stacks whose directory is not a git checkout. Stacks deployed from git are left to their repository. Edits are checked by Compose first, backed up, keep values shown as *** as they are, and roll back when a service does not come back up. Compose runs from a throwaway docker:29.5.2-cli container, since Unraid has none. New permissions compose:read and compose:update, both off by default, and four new tools
 ### 0.2.4
 - Refuse a device of /dev or /dev/ on a full install or a template edit. Templates use "/dev/" as a placeholder, and docker passes every host device for it. A device must name something under /dev, such as /dev/ttyUSB0 or /dev/dri
 - Leave a device overridden to "" out of the template, since Unraid's command builder turns an empty device into --device='' and docker refuses the container

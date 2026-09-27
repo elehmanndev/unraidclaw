@@ -23,8 +23,8 @@ UnraidClaw sits between AI agents and your Unraid servers. It provides a REST AP
 
 ## Features
 
-- **59 tools** across 15 categories: Health, Docker, Community Applications, Container Settings, App APIs, Plugins, VMs, Array, Disks, Shares, System, Notifications, Network, Users, Logs
-- **34 permission keys** in a resource:action matrix, configurable from the WebGUI
+- **63 tools** across 16 categories: Health, Docker, Community Applications, Container Settings, App APIs, Compose Stacks, Plugins, VMs, Array, Disks, Shares, System, Notifications, Network, Users, Logs
+- **36 permission keys** in a resource:action matrix, configurable from the WebGUI
 - **HTTPS** with auto-generated self-signed TLS certificate
 - **SHA-256 API key** authentication
 - **Activity logging** with JSONL format, filter, and search
@@ -154,6 +154,10 @@ REST authentication uses the `x-api-key: <api-key>` header. `/api/health` is pub
 | | POST | `/api/template/:name/edit` | `template:update` |
 | **App APIs** | GET | `/api/apps` | `apps:read` |
 | | POST | `/api/apps/:name/request` | `apps:read` for GET and HEAD, `apps:update` otherwise |
+| **Compose Stacks** | GET | `/api/compose` | `compose:read` |
+| | GET | `/api/compose/:project` | `compose:read` |
+| | POST | `/api/compose/:project/action` | `compose:update` |
+| | POST | `/api/compose/:project/edit` | `compose:update` |
 | **Plugins** | GET | `/api/plugins` | `plugins:read` |
 | | GET | `/api/plugins/:file` | `plugins:read` |
 | | POST | `/api/plugins/install` | `plugins:create` |
@@ -310,6 +314,24 @@ The key saved for the app on the **App Keys** tab is added to the request, as a 
 
 The result carries the app's own status, the useful response headers, and the body: parsed when it is JSON, as text otherwise, or only its size when it is binary. Bodies are cut off at 512 KiB. GET and HEAD need `apps:read`; every other method needs `apps:update`, dry runs included. `GET /api/apps` lists each container's default address and whether it has a key.
 
+### Compose stacks
+
+`GET /api/compose` lists every Docker Compose project that has containers, found from their `com.docker.compose.*` labels, with its services and state. A stack deployed from inside another container, such as a webhook with the Docker socket, records paths as that container saw them; UnraidClaw uses whichever recorded working directory exists on the host and finds each compose file at the same place relative to it.
+
+Each stack has a `managedBy`:
+
+- `local`: its directory is not a git checkout. It can be edited, pulled and redeployed.
+- `git`: its directory is a git checkout, so its repository is the source and its own deploy applies changes. Only `start`, `stop` and `restart` are offered; edits, `pull` and `up` are refused, because the next deploy would overwrite or trip over them.
+- `unmanaged`: no compose file exists on the host. Only `start`, `stop` and `restart`.
+
+`GET /api/compose/:project` returns the compose files with the values of secret-looking keys (password, secret, token, API key and similar) and every value from the stack's `.env` shown as `***`, the `.env` keys without values, and for a git stack its remote without credentials.
+
+`POST /api/compose/:project/action` takes `start`, `stop` or `restart`, which run as plain `docker` commands on the stack's containers, or `pull` or `up`, which run Compose. Optional `services` limits it; `dryRun` reports the containers and, for `up`, Compose's own `--dry-run` output.
+
+`POST /api/compose/:project/edit` takes the whole new file as `content`. A value still shown as `***` keeps the value the file has now; a `***` with nothing to keep is refused. The new file is checked with `docker compose config` mounted over the real one, so relative paths and `.env` resolve as they will. A dry run returns the diff and what `up --dry-run` would do. A real edit backs up the file to `/boot/config/plugins/unraidclaw/compose-backups/`, saves it, and runs `up -d`; if a service that was running does not stay up, the old file is put back and redeployed and the failing services' logs are returned.
+
+Unraid has no Compose of its own, so every Compose command runs in a throwaway `docker:29.5.2-cli` container with the Docker socket and the stack's directory mounted at the same path.
+
 ### Plugins
 
 The separate Plugins endpoints manage Unraid `.plg` plugins without CA. List and inspect require `plugins:read`; install requires `plugins:create`; check and update require `plugins:update`; removal requires `plugins:delete`. All four permissions default to off.
@@ -409,7 +431,7 @@ The transport uses stateless JSON responses without SSE or sessions. It supports
 | OPTIONS | `/mcp` | HTTP 204 when enabled and Origin is allowed; no key required |
 | Any | `/mcp` | HTTP 404 when disabled |
 
-The endpoint exposes the same 59 tools as the OpenClaw plugin, without OpenClaw's `server` argument. Read-only tools carry `readOnlyHint`; every other tool carries `destructiveHint`. Each call runs through the gateway's own `/api/` route in process, so the permission matrix, body validation, dry-run rules and blockers apply unchanged. OpenClaw keeps using `/api/*` whether MCP is on or off.
+The endpoint exposes the same 63 tools as the OpenClaw plugin, without OpenClaw's `server` argument. Read-only tools carry `readOnlyHint`; every other tool carries `destructiveHint`. Each call runs through the gateway's own `/api/` route in process, so the permission matrix, body validation, dry-run rules and blockers apply unchanged. OpenClaw keeps using `/api/*` whether MCP is on or off.
 
 ### Activity log
 
@@ -437,7 +459,7 @@ What this means for clients:
 
 ## OpenClaw plugin
 
-The [OpenClaw](https://github.com/openclaw/openclaw) plugin exposes all 59 tools to any AI agent that supports the OpenClaw protocol.
+The [OpenClaw](https://github.com/openclaw/openclaw) plugin exposes all 63 tools to any AI agent that supports the OpenClaw protocol.
 
 ### Install
 
@@ -541,6 +563,7 @@ The secret then lives in your environment (shell, systemd `EnvironmentFile`, or 
 | Community Apps | `unraid_ca_search`, `unraid_ca_app`, `unraid_ca_install`, `unraid_ca_update`, `unraid_ca_remove` |
 | Container Settings | `unraid_template_get`, `unraid_template_edit` |
 | App APIs | `unraid_app_list`, `unraid_app_request` |
+| Compose Stacks | `unraid_compose_list`, `unraid_compose_get`, `unraid_compose_edit`, `unraid_compose_action` |
 | Plugins | `unraid_plugins_list`, `unraid_plugin_info`, `unraid_plugin_install`, `unraid_plugin_check_updates`, `unraid_plugin_update`, `unraid_plugin_remove` |
 | VMs | `unraid_vm_list`, `unraid_vm_inspect`, `unraid_vm_start`, `unraid_vm_stop`, `unraid_vm_pause`, `unraid_vm_resume`, `unraid_vm_force_stop`, `unraid_vm_reboot` |
 | Array | `unraid_array_status`, `unraid_array_start`, `unraid_array_stop`, `unraid_parity_status`, `unraid_parity_start`, `unraid_parity_pause`, `unraid_parity_resume`, `unraid_parity_cancel` |
@@ -562,6 +585,7 @@ Permissions use a `resource:action` format. Configure them from the WebGUI Permi
 | Community Apps | `ca:read`, `ca:create`, `ca:update`, `ca:delete` |
 | Container Settings | `template:read`, `template:update` |
 | App APIs | `apps:read`, `apps:update` |
+| Compose Stacks | `compose:read`, `compose:update` |
 | Plugins | `plugins:read`, `plugins:create`, `plugins:update`, `plugins:delete` |
 | VMs | `vms:read`, `vms:update`, `vms:delete` |
 | Array & Storage | `array:read`, `array:update`, `disk:read`, `share:read`, `share:update` |
@@ -571,7 +595,7 @@ Permissions use a `resource:action` format. Configure them from the WebGUI Permi
 | Users | `me:read` |
 | Logs | `logs:read` |
 
-The WebGUI includes **Read Only**, **Docker Manager**, **VM Manager**, **Full Admin**, and **None** presets. Docker Manager includes all four `ca:` permissions. Read Only includes `plugins:read`, `template:read` and `apps:read`. `template:update` and `apps:update` must be enabled individually or through Full Admin. Plugin write permissions must be enabled individually or through Full Admin.
+The WebGUI includes **Read Only**, **Docker Manager**, **VM Manager**, **Full Admin**, and **None** presets. Docker Manager includes all four `ca:` permissions. Read Only includes `plugins:read`, `template:read`, `apps:read` and `compose:read`. `template:update`, `apps:update` and `compose:update` must be enabled individually or through Full Admin. Plugin write permissions must be enabled individually or through Full Admin.
 
 ## Architecture
 
