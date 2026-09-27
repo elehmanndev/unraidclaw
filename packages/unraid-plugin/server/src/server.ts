@@ -93,6 +93,7 @@ export function createServer(config: ServerConfig, httpsOpts?: { cert: Buffer; k
       durationMs: Math.round(reply.elapsedTime),
       ip: request.ip,
       ...(tool ? { tool } : {}),
+      ...(request.activityDetail ? { detail: request.activityDetail } : {}),
     };
     activityLogger.log(entry);
   });
