@@ -14,6 +14,8 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://github.com/elehmanndev/unraidclaw" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
 
 <CHANGES>
+### 0.2.6
+- Add background jobs: POST /api/jobs runs an app install or update, a container edit, a compose action or edit, or a plugin install or update without holding the request open, through the same tool and route as a direct call and with the caller's permissions. GET /api/jobs and /api/jobs/:id read jobs back, and an Unraid notification says when one finishes. New permissions jobs:read and jobs:create, both off by default, and three new tools
 ### 0.2.5
 - Add compose stacks: list Docker Compose stacks with their services, read their compose files with secrets hidden, start, stop and restart any stack, and edit, pull and redeploy stacks whose directory is not a git checkout. Stacks deployed from git are left to their repository. Edits are checked by Compose first, backed up, keep values shown as *** as they are, and roll back when a service does not come back up. Compose runs from a throwaway docker:29.5.2-cli container, since Unraid has none. New permissions compose:read and compose:update, both off by default, and four new tools
 ### 0.2.4

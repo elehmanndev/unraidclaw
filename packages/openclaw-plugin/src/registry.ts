@@ -4,6 +4,7 @@ import { registerCaTools } from "./tools/ca.js";
 import { registerTemplateTools } from "./tools/template.js";
 import { registerAppTools } from "./tools/apps.js";
 import { registerComposeTools } from "./tools/compose.js";
+import { registerJobTools } from "./tools/jobs.js";
 import { registerPluginTools } from "./tools/plugins.js";
 import { registerVMTools } from "./tools/vms.js";
 import { registerArrayTools } from "./tools/array.js";
@@ -39,6 +40,7 @@ export function registerTools(
   registerTemplateTools(api, getClient);
   registerAppTools(api, getClient);
   registerComposeTools(api, getClient);
+  registerJobTools(api, getClient);
   registerPluginTools(api, getClient);
   registerVMTools(api, getClient);
   registerArrayTools(api, getClient);
@@ -55,7 +57,7 @@ export function registerTools(
 // receive readOnlyHint; new tools conservatively default to destructive.
 export const READ_ONLY = new Set([
   "unraid_health_check", "unraid_docker_list", "unraid_docker_inspect", "unraid_docker_logs",
-  "unraid_ca_search", "unraid_ca_app", "unraid_template_get", "unraid_app_list", "unraid_compose_list", "unraid_compose_get", "unraid_plugins_list", "unraid_plugin_info",
+  "unraid_ca_search", "unraid_ca_app", "unraid_template_get", "unraid_app_list", "unraid_compose_list", "unraid_compose_get", "unraid_job_get", "unraid_job_list", "unraid_plugins_list", "unraid_plugin_info",
   "unraid_vm_list", "unraid_vm_inspect", "unraid_array_status", "unraid_parity_status", "unraid_disk_list",
   "unraid_disk_details", "unraid_share_list", "unraid_share_details", "unraid_system_info",
   "unraid_system_metrics", "unraid_service_list", "unraid_notification_list",
