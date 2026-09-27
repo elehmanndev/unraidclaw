@@ -1442,17 +1442,19 @@ test("settings are only accepted on a full install", async () => {
 test("a full install writes privileged mode and devices into the template", async () => {
   await setPermissions(FULL);
   const { app, runs, templatesDir } = await harness();
-  const dry = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { full: true, dryRun: true } });
+  const devices = { Webcam: "/dev/video0", CNC: "/dev/ttyUSB0" };
+  const dry = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { full: true, dryRun: true, overrides: devices } });
   assert.equal(dry.statusCode, 200, dry.body);
   const { plan, warnings } = dry.json().data;
   assert.equal(plan.full, true);
   assert.equal(plan.settings.Privileged, "true");
   assert.match(plan.templateXml, /<Privileged>true<\/Privileged>/);
-  assert.match(plan.templateXml, /Type="Device"/);
+  assert.match(plan.templateXml, /Type="Device"[^>]*>\/dev\/ttyUSB0</);
+  assert.match(plan.templateXml, /Name="Webcam"[^>]*Type="Device"[^>]*>\/dev\/video0</, "each device keeps its own value");
   assert.ok(warnings.some((w: string) => w.includes("privileged mode") && w.includes("host devices")), JSON.stringify(warnings));
   assert.deepEqual(runs, [], "a dry run runs nothing");
 
-  const res = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { full: true } });
+  const res = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { full: true, overrides: devices } });
   assert.equal(res.statusCode, 200, res.body);
   const files = await readdir(templatesDir);
   assert.equal(files.length, 1);
@@ -1525,4 +1527,27 @@ test("a device that is not under /dev is refused on a full install", async () =>
   const res = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { full: true, dryRun: true } });
   assert.equal(res.statusCode, 400);
   assert.match(res.json().error.message, /under \/dev\//);
+});
+
+test("a template's /dev/ placeholder is refused, since it would pass every host device", async () => {
+  await setPermissions(FULL);
+  const { app, runs } = await harness();
+  const res = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { full: true, dryRun: true } });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json().error.message, /placeholder that would give the container every device/);
+  assert.deepEqual(runs, []);
+});
+
+test("a device overridden to empty is left out of the template, not written as --device=''", async () => {
+  await setPermissions(FULL);
+  const { app } = await harness();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/ca/app/cncjs/install",
+    payload: { full: true, dryRun: true, overrides: { Webcam: "", CNC: "/dev/ttyACM0" } },
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  const xml: string = res.json().data.plan.templateXml;
+  assert.equal((xml.match(/Type="Device"/g) ?? []).length, 1);
+  assert.match(xml, /Name="CNC"[^>]*Type="Device"[^>]*>\/dev\/ttyACM0</);
 });

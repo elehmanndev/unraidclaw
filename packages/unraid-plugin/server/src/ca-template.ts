@@ -120,6 +120,20 @@ export function memoryLimitProblem(reason: (MemoryLimit & { ok: false })["reason
   }
 }
 
+/**
+ * A host device path docker can be given with --device.
+ *
+ * It must name something under /dev: a device such as /dev/ttyUSB0, or a
+ * directory of them such as /dev/dri. /dev itself is refused, because docker
+ * would pass every device on the host, and templates use "/dev/" as a
+ * placeholder for "pick your device".
+ */
+export function isSpecificDevice(path: string): boolean {
+  if (!path.startsWith("/dev/")) return false;
+  const parts = path.slice("/dev/".length).split("/").filter((p, i, all) => p !== "" || i < all.length - 1);
+  return parts.length > 0 && parts.every((p) => p !== "" && p !== "." && p !== ".." && !/\s/.test(p));
+}
+
 export class CaInstallError extends Error {
   constructor(
     message: string,
@@ -333,7 +347,10 @@ export function missingRequired(config: CaConfigEntry[], overrides: Map<string, 
 }
 
 function overrideKey(entry: CaConfigEntry): string {
-  return `${entry.type}::${entry.target}`;
+  // Devices have no container-side target, so a template with two of them
+  // would give both the same key and one override would set them all. The
+  // name tells them apart; entries with a target keep the key they had.
+  return entry.target === "" ? `${entry.type}::::${entry.name}` : `${entry.type}::${entry.target}`;
 }
 
 /**
@@ -524,9 +541,14 @@ export function validateResolved(resolved: ResolvedTemplate): void {
       }
     } else if (c.type === "Device") {
       // Only reachable on a full install. Unraid passes the value to
-      // --device= quoted, so all that matters is that it names a device.
-      if (!c.value.startsWith("/dev/")) {
-        fail(`Device for "${c.name || c.target}" must be a path under /dev/, got "${c.value}".`);
+      // --device= quoted, so what matters is that it names one device.
+      if (!isSpecificDevice(c.value)) {
+        const label = c.name || c.target || "device";
+        fail(
+          c.value.replace(/\/+$/, "") === "/dev"
+            ? `"${label}" is set to "${c.value}", a placeholder that would give the container every device on the host. Pass the device in overrides, for example {"${label}": "/dev/ttyUSB0"}, or "" to leave it out.`
+            : `Device for "${label}" must be a path under /dev/ such as /dev/ttyUSB0 or /dev/dri, got "${c.value}".`
+        );
       }
     }
   }
@@ -556,7 +578,8 @@ export function buildTemplateXml(app: CaApp, resolved: ResolvedTemplate, now = D
   const configs = resolved.config
     // An empty host port would make Unraid emit `-p ':8096/tcp'`, which docker
     // rejects. Dropping the entry is how "do not publish this port" is said.
-    .filter((c) => !(c.type === "Port" && c.value.trim() === ""))
+    // An empty device is the same: xmlToCommand emits `--device=''` for it.
+    .filter((c) => !((c.type === "Port" || c.type === "Device") && c.value.trim() === ""))
     .map((c) => {
       const attrs = [
         `Name="${e(c.name)}"`,

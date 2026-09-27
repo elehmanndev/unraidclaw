@@ -23,7 +23,7 @@ import type {
   TemplateSettingKey,
   TemplateView,
 } from "@unraidclaw/shared";
-import { CaInstallError } from "./ca-template.js";
+import { CaInstallError, isSpecificDevice } from "./ca-template.js";
 import { ATTR_PREFIX, XmlParseError, asArray, attrOf, parseXmlDocument, textOf } from "./xml.js";
 
 /** Elements an edit may set. Kept in the order Unraid's postToXML writes them. */
@@ -135,7 +135,9 @@ function checkEntryShape(type: CaConfigType, target: string, value: string | und
       if (mode !== undefined && mode !== "") invalid(`${where}.mode is only used for a Port or a Path.`);
       break;
     case "Device":
-      if (value !== undefined && !value.startsWith("/dev/")) invalid(`${where}.value must be a host device path under /dev/.`);
+      if (value !== undefined && !isSpecificDevice(value)) {
+        invalid(`${where}.value must name a host device under /dev/, such as /dev/ttyUSB0 or /dev/dri. /dev itself would pass every device.`);
+      }
       if (mode !== undefined && mode !== "") invalid(`${where}.mode is only used for a Port or a Path.`);
       break;
   }
@@ -201,7 +203,7 @@ export function parseTemplateEditBody(raw: unknown): TemplateEditRequest {
       }
       if (type !== "Device" && (edit.target === undefined || edit.target === "")) invalid(`${where}.target is required for a ${type}.`);
       if (type !== "Device" && edit.replaces !== undefined) invalid(`${where}.replaces is only used for a Device.`);
-      if (type === "Device" && edit.replaces !== undefined && !edit.replaces.startsWith("/dev/")) {
+      if (type === "Device" && edit.replaces !== undefined && !edit.replaces.startsWith("/dev")) {
         invalid(`${where}.replaces must be a host device path under /dev/.`);
       }
       checkEntryShape(type, edit.target ?? "", edit.value, edit.mode, where);

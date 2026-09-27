@@ -363,6 +363,9 @@ test("an edit body checks each config entry for its type", () => {
   assert.throws(bad({ type: "Path", target: "data", value: "/mnt/a" }), /absolute container path/);
   assert.throws(bad({ type: "Variable", target: "A B", value: "1" }), /without spaces/);
   assert.throws(bad({ type: "Device", value: "/mnt/dri" }), /under \/dev\//);
+  assert.throws(bad({ type: "Device", value: "/dev/" }), /every device/);
+  assert.throws(bad({ type: "Device", value: "/dev/../etc/shadow" }), /every device|under \/dev\//);
+  assert.doesNotThrow(bad({ type: "Device", value: "/dev/dri" }));
   assert.throws(bad({ type: "Socket", target: "x", value: "y" }), /must be one of/);
   assert.throws(bad({ type: "Variable", target: "A", value: "1", colour: "red" }), /Unknown field "colour"/);
   assert.doesNotThrow(bad({ type: "Path", target: "/media", value: "/mnt/user/media", mode: "ro,slave" }));
