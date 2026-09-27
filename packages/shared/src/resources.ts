@@ -4,6 +4,7 @@ export enum Resource {
   TEMPLATE = "template",
   APPS = "apps",
   COMPOSE = "compose",
+  JOBS = "jobs",
   PLUGINS = "plugins",
   VMS = "vms",
   ARRAY = "array",
@@ -83,6 +84,14 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     permissions: [
       { key: "compose:read", label: "View", description: "List compose stacks and their services, and read their compose files with secrets hidden" },
       { key: "compose:update", label: "Edit & Control", description: "Start, stop and restart a stack's services, and edit, pull and redeploy stacks that are not deployed from git", destructive: true },
+    ],
+  },
+  {
+    name: "Background Jobs",
+    description: "Run long operations in the background and get an Unraid notification when they finish",
+    permissions: [
+      { key: "jobs:read", label: "View", description: "List background jobs and read their results" },
+      { key: "jobs:create", label: "Start", description: "Run an app install or update, a container edit, a compose change or a plugin install or update in the background; the operation's own permission still applies" },
     ],
   },
   {

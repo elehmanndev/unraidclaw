@@ -1,6 +1,6 @@
 ---
 name: unraidclaw
-description: Manage your Unraid server through AI agents - 63 tools for Docker, Community Applications, container settings, app APIs, compose stacks, Unraid plugins, VMs, array, shares, system, notifications, and more with permission control.
+description: Manage your Unraid server through AI agents - 66 tools for Docker, Community Applications, container settings, app APIs, compose stacks, background jobs, Unraid plugins, VMs, array, shares, system, notifications, and more with permission control.
 ---
 
 # UnraidClaw
@@ -9,13 +9,14 @@ Manage your Unraid server through AI agents with full permission control.
 
 ## What it does
 
-UnraidClaw gives AI agents 63 tools across 16 categories to monitor and manage an Unraid server:
+UnraidClaw gives AI agents 66 tools across 17 categories to monitor and manage an Unraid server:
 
 - **Docker** - List, inspect, start, stop, restart, pause, unpause, remove, and create containers
 - **Community Applications** - Search the CA catalog, read an app's template, install an app as a container, update an installed app to a newer image, and remove one
 - **Container Settings** - Read an installed container's saved settings, and change any of them and rebuild it the way the Docker tab does
 - **App APIs** - Read or change things inside an installed app through its own web API, with the key the user saved for it
 - **Compose Stacks** - List Docker Compose stacks, read their files with secrets hidden, start, stop and restart them, and edit and redeploy local ones
+- **Background Jobs** - Run long installs, updates, rebuilds and redeploys in the background, with an Unraid notification when they finish
 - **Plugins** - List and inspect installed .plg plugins, install one from a URL, check for updates, update, and remove
 - **VMs** - List, inspect, start, stop, force-stop, pause, resume, and reboot virtual machines
 - **Array** - View array status, start/stop array, run parity checks
@@ -28,7 +29,7 @@ UnraidClaw gives AI agents 63 tools across 16 categories to monitor and manage a
 - **Logs** - Read syslog entries
 - **Health** - Server health check
 
-Tools use a 36-key permission matrix (resource:action) configurable from the Unraid WebGUI; health requires no permission. Activity logging excludes the public health probe, successful MCP handshakes and MCP GET/DELETE responses with status 405. The gateway also has an optional MCP endpoint, off by default, that exposes the same tools to MCP clients; this plugin does not use it.
+Tools use a 38-key permission matrix (resource:action) configurable from the Unraid WebGUI; health requires no permission. Activity logging excludes the public health probe, successful MCP handshakes and MCP GET/DELETE responses with status 405. The gateway also has an optional MCP endpoint, off by default, that exposes the same tools to MCP clients; this plugin does not use it.
 
 ## Updating and removing an installed app
 
@@ -69,6 +70,10 @@ Containers made by Docker Compose are not on the Docker tab's templates, so `unr
 A `git` stack is a checkout of a repository and is deployed from there, often by a webhook. Do not try to edit or redeploy it here; the tools refuse. Explain that the change belongs in the repository, and offer to make it there if you can. Starting, stopping and restarting it is fine.
 
 For a `local` stack, read it with `unraid_compose_get`, change what is needed in the text you were given, and send the whole file back with `unraid_compose_edit`. Leave `***` where a secret was: it keeps the real value. Dry-run first and show the user the diff and the planned actions. If the redeploy fails, the old file is already back; read the logs in the error and propose a fix.
+
+## Long operations
+
+Pulling an image, installing or updating an app, rebuilding a container and redeploying a stack can take minutes. Run them with `unraid_job_start` rather than waiting, especially when the user is on a phone: give it the tool's name and the same arguments you would pass directly, then tell the user the job is running and that they will get a notification when it is done. Do the dry run directly first, since a dry run is quick and the user should see it before anything changes. Check on a job with `unraid_job_get` when the user asks, and read its result or error back the way you would for a direct call.
 
 ## Plugins
 

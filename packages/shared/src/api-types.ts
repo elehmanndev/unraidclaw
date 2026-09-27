@@ -556,6 +556,38 @@ export interface ComposeActionResponse {
   warnings: string[];
 }
 
+// ── Background jobs ─────────────────────────────────────
+
+export type JobStatus = "queued" | "running" | "succeeded" | "failed";
+
+export interface JobSummary {
+  id: string;
+  tool: string;
+  /** What the job acts on, e.g. "jellyfin" or "mealplan-webhook". */
+  target: string;
+  status: JobStatus;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  /** Whether the finish notification went out: sent, off, not permitted or failed. */
+  notification: "pending" | "sent" | "off" | "not permitted" | "failed";
+}
+
+export interface JobDetail extends JobSummary {
+  /** The tool's result, as the tool would have returned it. Arguments are not kept: they can hold secrets. */
+  result?: unknown;
+  /** The tool's error, when it failed. */
+  error?: string;
+}
+
+export interface JobStartRequest {
+  tool: string;
+  arguments?: Record<string, unknown>;
+  /** Send an Unraid notification when the job finishes (default true). Needs notification:create. */
+  notify?: boolean;
+}
+
 // ── Plugins (.plg) ──────────────────────────────────────
 
 export interface PluginSummary {

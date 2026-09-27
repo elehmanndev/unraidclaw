@@ -353,6 +353,23 @@ $certificateReadable = $certificate['present'] && !isset($certificate['error']);
       </div>
     </div>
 
+    <!-- Background Jobs -->
+    <div class="occ-perm-category">
+      <div class="occ-perm-header" onclick="occToggleCategory(this)">
+        <span class="occ-expand-icon">&#9654;</span>
+        <h3>Background Jobs</h3>
+        <span class="occ-perm-summary" data-category="jobs"></span>
+        <div class="occ-cat-toggle">
+          <button type="button" class="occ-btn occ-btn-xs" onclick="event.stopPropagation(); occSetCategory('jobs', true)">All</button>
+          <button type="button" class="occ-btn occ-btn-xs" onclick="event.stopPropagation(); occSetCategory('jobs', false)">None</button>
+        </div>
+      </div>
+      <div class="occ-perm-body" style="display:none;">
+        <label class="occ-perm-item"><input type="checkbox" name="jobs:read" data-category="jobs" <?=!empty($permissions['jobs:read']) ? 'checked' : ''?>><span class="occ-perm-label">View</span><span class="occ-perm-desc">List background jobs and read their results</span></label>
+        <label class="occ-perm-item"><input type="checkbox" name="jobs:create" data-category="jobs" <?=!empty($permissions['jobs:create']) ? 'checked' : ''?>><span class="occ-perm-label">Start</span><span class="occ-perm-desc">Run an app install or update, a container edit, a compose change or a plugin install or update in the background; the operation's own permission still applies</span></label>
+      </div>
+    </div>
+
     <!-- Plugins -->
     <div class="occ-perm-category">
       <div class="occ-perm-header" onclick="occToggleCategory(this)">

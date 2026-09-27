@@ -23,8 +23,8 @@ UnraidClaw sits between AI agents and your Unraid servers. It provides a REST AP
 
 ## Features
 
-- **63 tools** across 16 categories: Health, Docker, Community Applications, Container Settings, App APIs, Compose Stacks, Plugins, VMs, Array, Disks, Shares, System, Notifications, Network, Users, Logs
-- **36 permission keys** in a resource:action matrix, configurable from the WebGUI
+- **66 tools** across 17 categories: Health, Docker, Community Applications, Container Settings, App APIs, Compose Stacks, Background Jobs, Plugins, VMs, Array, Disks, Shares, System, Notifications, Network, Users, Logs
+- **38 permission keys** in a resource:action matrix, configurable from the WebGUI
 - **HTTPS** with auto-generated self-signed TLS certificate
 - **SHA-256 API key** authentication
 - **Activity logging** with JSONL format, filter, and search
@@ -158,6 +158,9 @@ REST authentication uses the `x-api-key: <api-key>` header. `/api/health` is pub
 | | GET | `/api/compose/:project` | `compose:read` |
 | | POST | `/api/compose/:project/action` | `compose:update` |
 | | POST | `/api/compose/:project/edit` | `compose:update` |
+| **Background Jobs** | POST | `/api/jobs` | `jobs:create`, plus the job's own tool permission |
+| | GET | `/api/jobs` | `jobs:read` |
+| | GET | `/api/jobs/:id` | `jobs:read` |
 | **Plugins** | GET | `/api/plugins` | `plugins:read` |
 | | GET | `/api/plugins/:file` | `plugins:read` |
 | | POST | `/api/plugins/install` | `plugins:create` |
@@ -332,6 +335,20 @@ Each stack has a `managedBy`:
 
 Unraid has no Compose of its own, so every Compose command runs in a throwaway `docker:29.5.2-cli` container with the Docker socket and the stack's directory mounted at the same path.
 
+### Background jobs
+
+`POST /api/jobs` runs a long operation without holding the request open and answers 202 with the job's ID:
+
+```json
+{ "tool": "unraid_ca_update", "arguments": { "name": "jellyfin" }, "notify": true }
+```
+
+A job is a tool call run later: the named tool runs through the same definition and `/api/` route as an MCP or CLI call, in process, with the submitter's API key. The route's own permission, validation and activity logging apply unchanged, so `jobs:create` alone runs nothing. Only these tools can be jobs, since everything else is quick: `unraid_ca_install`, `unraid_ca_update`, `unraid_template_edit`, `unraid_compose_action`, `unraid_compose_edit`, `unraid_plugin_install` and `unraid_plugin_update`. Arguments are checked against the tool's schema before anything is queued.
+
+Two jobs run at a time and the rest wait. When one finishes, an Unraid notification says so, through `POST /api/notifications`, which needs `notification:create`; Unraid forwards it to a phone when a notification agent is set up. `"notify": false` turns it off.
+
+`GET /api/jobs` lists jobs newest first and `GET /api/jobs/:id` returns one with the tool's result or error. The arguments are not kept in what is returned, since they can hold secrets. Jobs live in memory: the last 50 finished ones are kept, and a service restart forgets them. The key a queued job needs is held only until it finishes.
+
 ### Plugins
 
 The separate Plugins endpoints manage Unraid `.plg` plugins without CA. List and inspect require `plugins:read`; install requires `plugins:create`; check and update require `plugins:update`; removal requires `plugins:delete`. All four permissions default to off.
@@ -431,7 +448,7 @@ The transport uses stateless JSON responses without SSE or sessions. It supports
 | OPTIONS | `/mcp` | HTTP 204 when enabled and Origin is allowed; no key required |
 | Any | `/mcp` | HTTP 404 when disabled |
 
-The endpoint exposes the same 63 tools as the OpenClaw plugin, without OpenClaw's `server` argument. Read-only tools carry `readOnlyHint`; every other tool carries `destructiveHint`. Each call runs through the gateway's own `/api/` route in process, so the permission matrix, body validation, dry-run rules and blockers apply unchanged. OpenClaw keeps using `/api/*` whether MCP is on or off.
+The endpoint exposes the same 66 tools as the OpenClaw plugin, without OpenClaw's `server` argument. Read-only tools carry `readOnlyHint`; every other tool carries `destructiveHint`. Each call runs through the gateway's own `/api/` route in process, so the permission matrix, body validation, dry-run rules and blockers apply unchanged. OpenClaw keeps using `/api/*` whether MCP is on or off.
 
 ### Activity log
 
@@ -459,7 +476,7 @@ What this means for clients:
 
 ## OpenClaw plugin
 
-The [OpenClaw](https://github.com/openclaw/openclaw) plugin exposes all 63 tools to any AI agent that supports the OpenClaw protocol.
+The [OpenClaw](https://github.com/openclaw/openclaw) plugin exposes all 66 tools to any AI agent that supports the OpenClaw protocol.
 
 ### Install
 
@@ -564,6 +581,7 @@ The secret then lives in your environment (shell, systemd `EnvironmentFile`, or 
 | Container Settings | `unraid_template_get`, `unraid_template_edit` |
 | App APIs | `unraid_app_list`, `unraid_app_request` |
 | Compose Stacks | `unraid_compose_list`, `unraid_compose_get`, `unraid_compose_edit`, `unraid_compose_action` |
+| Background Jobs | `unraid_job_start`, `unraid_job_get`, `unraid_job_list` |
 | Plugins | `unraid_plugins_list`, `unraid_plugin_info`, `unraid_plugin_install`, `unraid_plugin_check_updates`, `unraid_plugin_update`, `unraid_plugin_remove` |
 | VMs | `unraid_vm_list`, `unraid_vm_inspect`, `unraid_vm_start`, `unraid_vm_stop`, `unraid_vm_pause`, `unraid_vm_resume`, `unraid_vm_force_stop`, `unraid_vm_reboot` |
 | Array | `unraid_array_status`, `unraid_array_start`, `unraid_array_stop`, `unraid_parity_status`, `unraid_parity_start`, `unraid_parity_pause`, `unraid_parity_resume`, `unraid_parity_cancel` |
@@ -586,6 +604,7 @@ Permissions use a `resource:action` format. Configure them from the WebGUI Permi
 | Container Settings | `template:read`, `template:update` |
 | App APIs | `apps:read`, `apps:update` |
 | Compose Stacks | `compose:read`, `compose:update` |
+| Background Jobs | `jobs:read`, `jobs:create` |
 | Plugins | `plugins:read`, `plugins:create`, `plugins:update`, `plugins:delete` |
 | VMs | `vms:read`, `vms:update`, `vms:delete` |
 | Array & Storage | `array:read`, `array:update`, `disk:read`, `share:read`, `share:update` |
@@ -595,7 +614,7 @@ Permissions use a `resource:action` format. Configure them from the WebGUI Permi
 | Users | `me:read` |
 | Logs | `logs:read` |
 
-The WebGUI includes **Read Only**, **Docker Manager**, **VM Manager**, **Full Admin**, and **None** presets. Docker Manager includes all four `ca:` permissions. Read Only includes `plugins:read`, `template:read`, `apps:read` and `compose:read`. `template:update`, `apps:update` and `compose:update` must be enabled individually or through Full Admin. Plugin write permissions must be enabled individually or through Full Admin.
+The WebGUI includes **Read Only**, **Docker Manager**, **VM Manager**, **Full Admin**, and **None** presets. Docker Manager includes all four `ca:` permissions. Read Only includes `plugins:read`, `template:read`, `apps:read`, `compose:read` and `jobs:read`. `template:update`, `apps:update` and `compose:update` must be enabled individually or through Full Admin. Plugin write permissions must be enabled individually or through Full Admin.
 
 ## Architecture
 

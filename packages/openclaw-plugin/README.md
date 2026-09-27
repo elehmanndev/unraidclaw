@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/unraidclaw)](https://www.npmjs.com/package/unraidclaw)
 
-This is the [OpenClaw](https://github.com/openclaw/openclaw) plugin for **[UnraidClaw](https://github.com/emaspa/unraidclaw)**. It exposes **63 tools** to any AI agent running on OpenClaw, letting it monitor and manage your Unraid server. The plugin talks to the UnraidClaw gateway (a permission-enforcing REST API) running on your Unraid box.
+This is the [OpenClaw](https://github.com/openclaw/openclaw) plugin for **[UnraidClaw](https://github.com/emaspa/unraidclaw)**. It exposes **66 tools** to any AI agent running on OpenClaw, letting it monitor and manage your Unraid server. The plugin talks to the UnraidClaw gateway (a permission-enforcing REST API) running on your Unraid box.
 
 ## Prerequisites
 
@@ -115,7 +115,7 @@ Once installed and configured, ask your agent:
 
 ## Tools
 
-63 tools across 16 categories:
+66 tools across 17 categories:
 
 | Category | Tools |
 |----------|-------|
@@ -125,6 +125,7 @@ Once installed and configured, ask your agent:
 | Container Settings | `unraid_template_get`, `unraid_template_edit` |
 | App APIs | `unraid_app_list`, `unraid_app_request` |
 | Compose Stacks | `unraid_compose_list`, `unraid_compose_get`, `unraid_compose_edit`, `unraid_compose_action` |
+| Background Jobs | `unraid_job_start`, `unraid_job_get`, `unraid_job_list` |
 | Plugins | `unraid_plugins_list`, `unraid_plugin_info`, `unraid_plugin_install`, `unraid_plugin_check_updates`, `unraid_plugin_update`, `unraid_plugin_remove` |
 | VMs | `unraid_vm_list`, `unraid_vm_inspect`, `unraid_vm_start`, `unraid_vm_stop`, `unraid_vm_pause`, `unraid_vm_resume`, `unraid_vm_force_stop`, `unraid_vm_reboot` |
 | Array | `unraid_array_status`, `unraid_array_start`, `unraid_array_stop`, `unraid_parity_status`, `unraid_parity_start`, `unraid_parity_pause`, `unraid_parity_resume`, `unraid_parity_cancel` |
@@ -146,9 +147,11 @@ Once installed and configured, ask your agent:
 
 The four compose tools manage Docker Compose stacks. Stacks deployed from a git checkout can only be started, stopped and restarted, since their repository is the source; local stacks can also be edited and redeployed, with a backup and a rollback when a service does not come back. Secrets in compose files are shown as `***` and kept when sent back that way.
 
+`unraid_job_start` runs a long install, update, container edit, compose change or plugin operation in the background and returns at once; `unraid_job_get` and `unraid_job_list` read it back, and an Unraid notification says when it is done. The tool's own permission still applies.
+
 The six plugin tools manage Unraid `.plg` plugins through Unraid's own plugin manager. Installing one runs vendor code as root, checking for an update downloads a plugin file and stages it, and removing one runs the plugin's removal script, which may take its data with it. All four mutating tools take `dryRun`.
 
-Tools use the gateway's 36-key `resource:action` permission matrix configured from the Unraid WebGUI. Health requires no permission.
+Tools use the gateway's 38-key `resource:action` permission matrix configured from the Unraid WebGUI. Health requires no permission.
 
 ## Links
 
@@ -158,7 +161,7 @@ Tools use the gateway's 36-key `resource:action` permission matrix configured fr
 
 ## Gateway MCP mode
 
-The gateway has an optional MCP endpoint at `/mcp` that serves the same 63 tools to MCP clients. It is off by default and is switched on with **Enable MCP** in the gateway's Settings tab. This plugin does not use it: OpenClaw keeps calling `/api/*` whether MCP is on or off. The tool definitions in this package are shared with the gateway through the `unraidclaw/tools` export, so OpenClaw, MCP and the standalone CLI use the same tools and the `READ_ONLY` set exported by `src/registry.ts`. The CLI, command `unraidclaw`, is published to npm as `unraidclaw-cli` and attached to each [GitHub release](https://github.com/emaspa/unraidclaw/releases/latest) as `unraidclaw-cli-<version>.tar.gz`; see the [CLI guide](https://github.com/emaspa/unraidclaw/blob/main/packages/cli/README.md). See the [repository README](https://github.com/emaspa/unraidclaw#mcp) for MCP client setup.
+The gateway has an optional MCP endpoint at `/mcp` that serves the same 66 tools to MCP clients. It is off by default and is switched on with **Enable MCP** in the gateway's Settings tab. This plugin does not use it: OpenClaw keeps calling `/api/*` whether MCP is on or off. The tool definitions in this package are shared with the gateway through the `unraidclaw/tools` export, so OpenClaw, MCP and the standalone CLI use the same tools and the `READ_ONLY` set exported by `src/registry.ts`. The CLI, command `unraidclaw`, is published to npm as `unraidclaw-cli` and attached to each [GitHub release](https://github.com/emaspa/unraidclaw/releases/latest) as `unraidclaw-cli-<version>.tar.gz`; see the [CLI guide](https://github.com/emaspa/unraidclaw/blob/main/packages/cli/README.md). See the [repository README](https://github.com/emaspa/unraidclaw#mcp) for MCP client setup.
 
 ## License
 
