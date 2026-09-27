@@ -1,6 +1,6 @@
 {
   "name": "unraidclaw-cli",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": false,
   "description": "Command-line client for the UnraidClaw gateway",
   "keywords": [

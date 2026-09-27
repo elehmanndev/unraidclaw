@@ -3,7 +3,7 @@
 // ── Permission presets (mirror of shared/permissions.ts) ──
 var OCC_PRESETS = {
   'read-only': [
-    'docker:read','ca:read','template:read','apps:read','plugins:read','vms:read','array:read','disk:read','share:read',
+    'docker:read','ca:read','template:read','apps:read','compose:read','plugins:read','vms:read','array:read','disk:read','share:read',
     'info:read','services:read','notification:read',
     'network:read','me:read','logs:read'
   ],
@@ -26,6 +26,7 @@ var OCC_CATEGORIES = {
   'ca':           ['ca:read','ca:create','ca:update','ca:delete'],
   'template':     ['template:read','template:update'],
   'apps':         ['apps:read','apps:update'],
+  'compose':      ['compose:read','compose:update'],
   'plugins':      ['plugins:read','plugins:create','plugins:update','plugins:delete'],
   'vms':          ['vms:read','vms:update','vms:delete'],
   'storage':      ['array:read','array:update','disk:read','share:read','share:update'],

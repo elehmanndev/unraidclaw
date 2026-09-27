@@ -14,6 +14,7 @@ import { registerDockerRoutes } from "./routes/docker.js";
 import { createCaRuntime, registerCaRoutes } from "./routes/ca.js";
 import { createTemplateRuntime, registerTemplateRoutes } from "./routes/template.js";
 import { registerAppRoutes } from "./routes/apps.js";
+import { registerComposeRoutes } from "./routes/compose.js";
 import { registerPluginRoutes } from "./routes/plugins.js";
 import { registerVMRoutes } from "./routes/vms.js";
 import { registerArrayRoutes } from "./routes/array.js";
@@ -124,6 +125,7 @@ export function createServer(config: ServerConfig, httpsOpts?: { cert: Buffer; k
   const caRuntime = createCaRuntime();
   registerTemplateRoutes(app, registerCaRoutes(app, caRuntime), createTemplateRuntime(caRuntime));
   registerAppRoutes(app);
+  registerComposeRoutes(app);
   registerPluginRoutes(app);
   registerVMRoutes(app, gql);
   registerArrayRoutes(app, gql);

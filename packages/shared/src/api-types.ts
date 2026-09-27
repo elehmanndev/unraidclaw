@@ -471,6 +471,91 @@ export interface AppRequestResponse {
   durationMs?: number;
 }
 
+// ── Compose stacks ──────────────────────────────────────
+
+export interface ComposeService {
+  service: string;
+  container: string;
+  state: string;
+  status: string;
+  image: string;
+}
+
+export interface ComposeStack {
+  /** Compose project name, the id used everywhere in this API. */
+  project: string;
+  /**
+   * "local" stacks can be edited and redeployed here. "git" stacks live in a
+   * git checkout, so their repository is the source and only start, stop and
+   * restart are offered. "unmanaged" stacks have no compose files on the host.
+   */
+  managedBy: "local" | "git" | "unmanaged";
+  /** The stack's directory on the host, or null when none of its labels names one that exists. */
+  workingDir: string | null;
+  /** Compose files on the host, in the order Compose reads them. */
+  files: string[];
+  services: ComposeService[];
+}
+
+export interface ComposeFileView {
+  name: string;
+  path: string;
+  /** The file with the values of secret-looking keys and .env values replaced by `***`. */
+  content: string;
+}
+
+export interface ComposeStackDetail extends ComposeStack {
+  composeFiles: ComposeFileView[];
+  /** Keys defined in the stack's .env file. Values are never returned. */
+  envKeys: string[];
+  /** Where a git stack's checkout pulls from, host and path only. */
+  gitRemote?: string;
+}
+
+export interface ComposeEditRequest {
+  /** File to replace, by name. Defaults to the stack's first compose file. */
+  file?: string;
+  /** The whole new file. A value left as `***` keeps the value the file has now. */
+  content: string;
+  /** Redeploy the stack after saving (default true). */
+  redeploy?: boolean;
+  dryRun?: boolean;
+}
+
+export interface ComposeEditResponse {
+  dryRun: boolean;
+  project: string;
+  file: string;
+  /** Unified diff of the change, secrets hidden. */
+  diff: string;
+  /** What `docker compose up --dry-run` says the redeploy would do. */
+  plannedActions: string[];
+  backupPath?: string;
+  redeployed: boolean;
+  services?: ComposeService[];
+  warnings: string[];
+}
+
+export type ComposeAction = "start" | "stop" | "restart" | "pull" | "up";
+
+export interface ComposeActionRequest {
+  action: ComposeAction;
+  /** Limit the action to these services. Default: all of them. */
+  services?: string[];
+  dryRun?: boolean;
+}
+
+export interface ComposeActionResponse {
+  dryRun: boolean;
+  project: string;
+  action: ComposeAction;
+  /** Containers acted on, or that would be. */
+  containers: string[];
+  services: ComposeService[];
+  output?: string;
+  warnings: string[];
+}
+
 // ── Plugins (.plg) ──────────────────────────────────────
 
 export interface PluginSummary {

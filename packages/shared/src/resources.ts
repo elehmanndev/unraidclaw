@@ -3,6 +3,7 @@ export enum Resource {
   CA = "ca",
   TEMPLATE = "template",
   APPS = "apps",
+  COMPOSE = "compose",
   PLUGINS = "plugins",
   VMS = "vms",
   ARRAY = "array",
@@ -74,6 +75,14 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     permissions: [
       { key: "apps:read", label: "Read", description: "Send read-only requests (GET, HEAD) to an installed app's own API" },
       { key: "apps:update", label: "Change", description: "Send requests that can change or delete an app's data (POST, PUT, PATCH, DELETE) to its own API", destructive: true },
+    ],
+  },
+  {
+    name: "Compose Stacks",
+    description: "Docker Compose stacks: status, compose files, edits and redeploys",
+    permissions: [
+      { key: "compose:read", label: "View", description: "List compose stacks and their services, and read their compose files with secrets hidden" },
+      { key: "compose:update", label: "Edit & Control", description: "Start, stop and restart a stack's services, and edit, pull and redeploy stacks that are not deployed from git", destructive: true },
     ],
   },
   {

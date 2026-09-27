@@ -336,6 +336,23 @@ $certificateReadable = $certificate['present'] && !isset($certificate['error']);
       </div>
     </div>
 
+    <!-- Compose Stacks -->
+    <div class="occ-perm-category">
+      <div class="occ-perm-header" onclick="occToggleCategory(this)">
+        <span class="occ-expand-icon">&#9654;</span>
+        <h3>Compose Stacks</h3>
+        <span class="occ-perm-summary" data-category="compose"></span>
+        <div class="occ-cat-toggle">
+          <button type="button" class="occ-btn occ-btn-xs" onclick="event.stopPropagation(); occSetCategory('compose', true)">All</button>
+          <button type="button" class="occ-btn occ-btn-xs" onclick="event.stopPropagation(); occSetCategory('compose', false)">None</button>
+        </div>
+      </div>
+      <div class="occ-perm-body" style="display:none;">
+        <label class="occ-perm-item"><input type="checkbox" name="compose:read" data-category="compose" <?=!empty($permissions['compose:read']) ? 'checked' : ''?>><span class="occ-perm-label">View</span><span class="occ-perm-desc">List compose stacks and their services, and read their compose files with secrets hidden</span></label>
+        <label class="occ-perm-item occ-destructive"><input type="checkbox" name="compose:update" data-category="compose" <?=!empty($permissions['compose:update']) ? 'checked' : ''?>><span class="occ-perm-label">Edit &amp; Control</span><span class="occ-perm-desc">Start, stop and restart a stack's services, and edit, pull and redeploy stacks that are not deployed from git (destructive)</span></label>
+      </div>
+    </div>
+
     <!-- Plugins -->
     <div class="occ-perm-category">
       <div class="occ-perm-header" onclick="occToggleCategory(this)">
