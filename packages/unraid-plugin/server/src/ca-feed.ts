@@ -59,6 +59,7 @@ export interface RawCaApp {
   MaxVer?: string;
   TailscaleEnabled?: string;
   MyMAC?: string;
+  CPUset?: string;
   // Unraid 7.4 template fields. Both change how the container runs, so
   // computeBlockers has to see them rather than let them fall off.
   Memory?: string;

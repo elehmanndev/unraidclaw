@@ -14,6 +14,8 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://github.com/elehmanndev/unraidclaw" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
 
 <CHANGES>
+### 0.2.3
+- Add full installs: POST /api/ca/app/:name/install with "full": true installs an app with every setting its template asks for, including privileged mode, Extra Parameters, Post Arguments, host devices, a MAC address and custom networks such as br0, where the plain install refuses them. A full install takes optional "settings", the same keys a template edit does, needs template:update as well as ca:create, and refuses a network that does not exist. Tailscale, extra networks and memory limits before Unraid 7.4 are still refused, because rebuild_container does not set them up
 ### 0.2.2
 - Fix saving a key on the App Keys tab failing with "Error: HTTP 200". The settings page sent Unraid a CSRF token from the wrong place, which only POST requests check; it now uses var.ini's csrf_token like Unraid's own pages
 - The activity log now shows what an app API call sent, such as DELETE /api/albums/42, next to the route, with saved keys redacted from query strings

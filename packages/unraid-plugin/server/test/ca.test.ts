@@ -987,7 +987,7 @@ test("an unknown body field is refused, so no flag can be smuggled past a blocke
   const { error } = res.json();
   assert.equal(error.code, "CA_INVALID_BODY");
   assert.ok(error.message.includes("force"), error.message);
-  assert.deepEqual(error.details.allowed, ["repo", "name", "overrides", "dryRun"]);
+  assert.deepEqual(error.details.allowed, ["repo", "name", "overrides", "dryRun", "full", "settings"]);
   assert.deepEqual(runs, []);
   assert.deepEqual(await readdir(templatesDir), []);
 });
@@ -1416,4 +1416,113 @@ test("empty 7.4 fields install exactly as a 7.3 template does", async () => {
     assert.match(plan.templateXml, /<ExtraNetworks\/>/, "and always empty");
     assert.ok(!plan.dockerCommandPreview.some((a: string) => a.startsWith("--memory")));
   }
+});
+
+// ── Full installs ───────────────────────────────────────────────
+
+const FULL = { ...ALL_CA, "template:update": true };
+
+test("a full install needs template:update as well as ca:create", async () => {
+  await setPermissions(ALL_CA);
+  const { app, runs } = await harness();
+  const res = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { full: true, dryRun: true } });
+  assert.equal(res.statusCode, 403);
+  assert.match(res.json().error.message, /template:update/);
+  assert.deepEqual(runs, []);
+});
+
+test("settings are only accepted on a full install", async () => {
+  await setPermissions(FULL);
+  const { app } = await harness();
+  const res = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { settings: { Privileged: "true" } } });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json().error.message, /full/);
+});
+
+test("a full install writes privileged mode and devices into the template", async () => {
+  await setPermissions(FULL);
+  const { app, runs, templatesDir } = await harness();
+  const dry = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { full: true, dryRun: true } });
+  assert.equal(dry.statusCode, 200, dry.body);
+  const { plan, warnings } = dry.json().data;
+  assert.equal(plan.full, true);
+  assert.equal(plan.settings.Privileged, "true");
+  assert.match(plan.templateXml, /<Privileged>true<\/Privileged>/);
+  assert.match(plan.templateXml, /Type="Device"/);
+  assert.ok(warnings.some((w: string) => w.includes("privileged mode") && w.includes("host devices")), JSON.stringify(warnings));
+  assert.deepEqual(runs, [], "a dry run runs nothing");
+
+  const res = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { full: true } });
+  assert.equal(res.statusCode, 200, res.body);
+  const files = await readdir(templatesDir);
+  assert.equal(files.length, 1);
+  const xml = await readFile(join(templatesDir, files[0]), "utf8");
+  assert.match(xml, /<Privileged>true<\/Privileged>/);
+  assert.ok(runs.some(([file]) => file === "/fake/rebuild_container"), "Unraid builds the container from the template");
+});
+
+test("a full install carries Extra Parameters, and settings from the request win", async () => {
+  await setPermissions(FULL);
+  const { app } = await harness({
+    run: async (file, args) => {
+      if (file === "docker" && args[0] === "network") return { stdout: "bridge\nhost\nnone\nbr0\n", stderr: "" };
+      if (file === "docker" && args[0] === "inspect") return { stdout: "sha256:deadbeef\ttrue\n", stderr: "" };
+      return { stdout: "", stderr: "" };
+    },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/ca/app/plex/install",
+    payload: {
+      repo: "hotio", full: true, dryRun: true,
+      overrides: { "Host Path for /config": "/mnt/user/appdata/plex", "Host Path for /data": "/mnt/user/media" },
+      settings: { Network: "br0", MyIP: "192.0.2.50" },
+    },
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  const { plan } = res.json().data;
+  assert.ok(plan.settings.ExtraParams, "the catalog's Extra Parameters are kept");
+  assert.equal(plan.settings.Network, "br0");
+  assert.match(plan.templateXml, /<Network>br0<\/Network>/);
+  assert.match(plan.templateXml, /<MyIP>192.0.2.50<\/MyIP>/);
+  assert.doesNotMatch(plan.templateXml, /<ExtraParams\/>/);
+});
+
+test("a full install refuses a network that does not exist", async () => {
+  await setPermissions(FULL);
+  const { app, templatesDir } = await harness({
+    run: async (file, args) => {
+      if (file === "docker" && args[0] === "network") return { stdout: "bridge\nhost\nnone\n", stderr: "" };
+      return { stdout: "", stderr: "" };
+    },
+  });
+  const res = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { full: true, settings: { Network: "br9" } } });
+  assert.equal(res.statusCode, 422);
+  assert.equal(res.json().error.code, "CA_UNKNOWN_NETWORK");
+  assert.deepEqual(await readdir(templatesDir), []);
+});
+
+test("a full install still refuses what rebuild_container would get wrong", async () => {
+  await setPermissions(FULL);
+  const feed = JSON.parse(FIXTURE);
+  const meshvault = feed.applist.find((a: { Name?: string }) => a.Name === "MeshVault");
+  meshvault.TailscaleEnabled = "true";
+  const { app } = await harness({}, JSON.stringify(feed));
+  const res = await app.inject({ method: "POST", url: "/api/ca/app/MeshVault/install", payload: { full: true, dryRun: true } });
+  assert.equal(res.statusCode, 422);
+  const codes = res.json().error.details.blockers.map((b: { code: string }) => b.code);
+  assert.deepEqual(codes, ["CA_TAILSCALE"]);
+});
+
+test("a device that is not under /dev is refused on a full install", async () => {
+  await setPermissions(FULL);
+  const feed = JSON.parse(FIXTURE);
+  const cnc = feed.applist.find((a: { Name?: string }) => String(a.Name).toLowerCase() === "cncjs");
+  const device = (Array.isArray(cnc.Config) ? cnc.Config : [cnc.Config]).find((c: { "@attributes": { Type: string } }) => c["@attributes"].Type === "Device");
+  device["@attributes"].Default = "/mnt/user/oops";
+  device.value = "/mnt/user/oops";
+  const { app } = await harness({}, JSON.stringify(feed));
+  const res = await app.inject({ method: "POST", url: "/api/ca/app/cncjs/install", payload: { full: true, dryRun: true } });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json().error.message, /under \/dev\//);
 });

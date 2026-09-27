@@ -247,6 +247,12 @@ Host paths are used as written. Supply overrides if you relocated appdata; Unrai
 
 An existing container or `my-<name>.xml` template returns 409 and is not overwritten. A failed install keeps its template so you can inspect it and finish from the Docker tab.
 
+#### Full installs
+
+`{"full": true}` installs an app with every setting its template asks for, the way the Docker tab would: privileged mode, Extra Parameters, Post Arguments, host devices, a MAC address, and a custom network such as `br0`. It needs `template:update` as well as `ca:create`. A full install also takes `settings`, the same keys `POST /api/template/:name/edit` does, for example `{"Network": "br0", "MyIP": "192.168.1.60"}`. Settings from the request override the catalog's.
+
+The settings are written into the template, and Unraid's `rebuild_container` builds the command from it, so `plan.templateXml` and `plan.settings` show what the container gets. `dockerCommandPreview` leaves them out. A network other than bridge, host or none must exist, because Unraid would otherwise move the container to `none`. Tailscale templates, templates with extra networks, and memory limits on Unraid before 7.4 are still refused: `rebuild_container` does not set those up.
+
 #### Updating and removing an installed app
 
 These endpoints take the **installed container name** from the Docker tab, which may differ from the catalog name:

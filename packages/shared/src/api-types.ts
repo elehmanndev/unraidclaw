@@ -145,6 +145,14 @@ export interface CaInstallRequest {
   overrides?: Record<string, string>;
   /** Resolve and validate everything, then return the plan without changing the system. */
   dryRun?: boolean;
+  /**
+   * Install with every setting the template asks for, as the Docker tab
+   * would: privileged mode, Extra Parameters, Post Arguments, devices, a MAC
+   * address and custom networks. Needs `template:update` as well as `ca:create`.
+   */
+  full?: boolean;
+  /** Template settings to set on a full install, such as a network and a fixed IP. */
+  settings?: Partial<Record<TemplateSettingKey, string>>;
 }
 
 export interface CaInstallPlan {
@@ -165,6 +173,14 @@ export interface CaInstallPlan {
    * Label entries. UnraidClaw never executes this.
    */
   dockerCommandPreview: string[];
+  /** True for a full install. */
+  full?: boolean;
+  /**
+   * On a full install, the settings written to the template beyond the plain
+   * install's, from the catalog and the request. The preview above leaves them
+   * out; `templateXml` has them, and Unraid builds the command from it.
+   */
+  settings?: Partial<Record<TemplateSettingKey, string>>;
 }
 
 export interface CaInstallResponse {
