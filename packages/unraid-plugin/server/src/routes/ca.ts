@@ -326,7 +326,7 @@ function detailFor(app: CaApp, env: TemplateEnv): CaAppDetail {
   };
 }
 
-export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = createCaRuntime()): void {
+export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = createCaRuntime()) {
   const { feed } = runtime;
 
   async function catalog() {
@@ -1291,4 +1291,13 @@ export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = crea
       }
     },
   });
+
+  return { claim: claimLifecycle, release: releaseLifecycle, inspectJson, loadInstalled };
 }
+
+/**
+ * What the CA routes share with the template edit routes: the same per-container
+ * lock, so an edit cannot run while an update of the same app is midway through
+ * its swap, and the same identity checks between a container and its template.
+ */
+export type CaLifecycle = ReturnType<typeof registerCaRoutes>;

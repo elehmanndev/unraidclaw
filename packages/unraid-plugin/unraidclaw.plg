@@ -14,6 +14,8 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://forums.unraid.net/topic/197498-plugin-support-unraidclaw-ai-agent-gateway-with-permission-control/" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
 
 <CHANGES>
+### Unreleased
+- Add container settings: GET /api/template/:name reads an installed container's saved template with masked values hidden, and POST /api/template/:name/edit changes it and rebuilds the container the way the Docker tab's Apply does. The command comes from Unraid's own docker manager, so privileged mode, devices, Extra Parameters, Post Arguments, custom networks with a fixed IP, extra networks, CPU pinning and Tailscale all work. The replacement is created before the running container is touched, must still be running a few seconds after it starts, and is rolled back with its last log lines if it is not. The template is backed up and only saved once the rebuilt container checks out. New permissions template:read and template:update, both off by default, and new tools unraid_template_get and unraid_template_edit
 ### 0.1.34
 - Keep serving when /var/log is full. A failed write to /var/log/unraidclaw.log used to leave the service listening but unable to answer requests or stop until it was killed. Log lines that cannot be written are now dropped, the service exits on stop even if closing stalls, and the start script warns when /var/log has no free space. Thanks to @golgoth85 for the report and the diagnosis (#18)
 - Rotate /var/log/unraidclaw.log at 5 MB through Unraid's daily logrotate run, so the request log cannot fill /var/log on its own
