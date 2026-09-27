@@ -23,8 +23,8 @@ UnraidClaw sits between AI agents and your Unraid servers. It provides a REST AP
 
 ## Features
 
-- **57 tools** across 14 categories: Health, Docker, Community Applications, Container Settings, Plugins, VMs, Array, Disks, Shares, System, Notifications, Network, Users, Logs
-- **32 permission keys** in a resource:action matrix, configurable from the WebGUI
+- **59 tools** across 15 categories: Health, Docker, Community Applications, Container Settings, App APIs, Plugins, VMs, Array, Disks, Shares, System, Notifications, Network, Users, Logs
+- **34 permission keys** in a resource:action matrix, configurable from the WebGUI
 - **HTTPS** with auto-generated self-signed TLS certificate
 - **SHA-256 API key** authentication
 - **Activity logging** with JSONL format, filter, and search
@@ -152,6 +152,8 @@ REST authentication uses the `x-api-key: <api-key>` header. `/api/health` is pub
 | | POST | `/api/ca/app/:name/remove` | `ca:delete` |
 | **Container Settings** | GET | `/api/template/:name` | `template:read` |
 | | POST | `/api/template/:name/edit` | `template:update` |
+| **App APIs** | GET | `/api/apps` | `apps:read` |
+| | POST | `/api/apps/:name/request` | `apps:read` for GET and HEAD, `apps:update` otherwise |
 | **Plugins** | GET | `/api/plugins` | `plugins:read` |
 | | GET | `/api/plugins/:file` | `plugins:read` |
 | | POST | `/api/plugins/install` | `plugins:create` |
@@ -288,6 +290,20 @@ A dry run returns the changes, the command with masked values redacted, the netw
 
 A real edit pulls the image only when it is not on the server yet, so changing settings never updates an app. It creates missing host paths as `nobody:users` and backs up the template to `/boot/config/plugins/unraidclaw/template-backups/`. It then builds the replacement under a temporary name before touching the running container. The swap and rollback work as they do for app updates. A running app must still be running a few seconds after starting. If it is not, the original returns and the new container's last log lines are included in the error. The template is saved only after the rebuilt container passes those checks. Docker volumes the container has that the new command does not mount are carried over. Bind mounts the edit drops are reported. A restarting container can be edited; paused or dying ones are refused.
 
+### App APIs
+
+`POST /api/apps/:name/request` sends one HTTP request to the web API of an installed container, for changes made inside an app rather than to its container, such as an album in Immich or a proxy host in Nginx Proxy Manager.
+
+```json
+{ "method": "POST", "path": "/api/albums", "body": { "albumName": "Holidays" }, "dryRun": true }
+```
+
+The name is the installed container name. UnraidClaw finds the container's address from `docker inspect`: `127.0.0.1` for host networking, otherwise its IP on its network. The port is `port` when given, else the one in the container's WebUI link, else its only exposed TCP port. Callers never pass a host, so a request cannot be sent anywhere but that container. A container on a macvlan network such as `br0` is reachable only when **Host access to custom networks** is enabled in Unraid's Docker settings.
+
+The key saved for the app on the **App Keys** tab is added to the request, as a named header, `Authorization: Bearer` or `Authorization: Basic`. Keys are saved from the WebGUI only, by POST with Unraid's CSRF token, and stored in `/boot/config/plugins/unraidclaw/app-keys.json`. No API returns a key. It is shown as `***` in the request headers, removed from response bodies and headers, and the caller cannot set its header. `Set-Cookie` is never passed back.
+
+The result carries the app's own status, the useful response headers, and the body: parsed when it is JSON, as text otherwise, or only its size when it is binary. Bodies are cut off at 512 KiB. GET and HEAD need `apps:read`; every other method needs `apps:update`, dry runs included. `GET /api/apps` lists each container's default address and whether it has a key.
+
 ### Plugins
 
 The separate Plugins endpoints manage Unraid `.plg` plugins without CA. List and inspect require `plugins:read`; install requires `plugins:create`; check and update require `plugins:update`; removal requires `plugins:delete`. All four permissions default to off.
@@ -387,7 +403,7 @@ The transport uses stateless JSON responses without SSE or sessions. It supports
 | OPTIONS | `/mcp` | HTTP 204 when enabled and Origin is allowed; no key required |
 | Any | `/mcp` | HTTP 404 when disabled |
 
-The endpoint exposes the same 57 tools as the OpenClaw plugin, without OpenClaw's `server` argument. Read-only tools carry `readOnlyHint`; every other tool carries `destructiveHint`. Each call runs through the gateway's own `/api/` route in process, so the permission matrix, body validation, dry-run rules and blockers apply unchanged. OpenClaw keeps using `/api/*` whether MCP is on or off.
+The endpoint exposes the same 59 tools as the OpenClaw plugin, without OpenClaw's `server` argument. Read-only tools carry `readOnlyHint`; every other tool carries `destructiveHint`. Each call runs through the gateway's own `/api/` route in process, so the permission matrix, body validation, dry-run rules and blockers apply unchanged. OpenClaw keeps using `/api/*` whether MCP is on or off.
 
 ### Activity log
 
@@ -415,7 +431,7 @@ What this means for clients:
 
 ## OpenClaw plugin
 
-The [OpenClaw](https://github.com/openclaw/openclaw) plugin exposes all 57 tools to any AI agent that supports the OpenClaw protocol.
+The [OpenClaw](https://github.com/openclaw/openclaw) plugin exposes all 59 tools to any AI agent that supports the OpenClaw protocol.
 
 ### Install
 
@@ -518,6 +534,7 @@ The secret then lives in your environment (shell, systemd `EnvironmentFile`, or 
 | Docker | `unraid_docker_list`, `unraid_docker_inspect`, `unraid_docker_logs`, `unraid_docker_create`, `unraid_docker_start`, `unraid_docker_stop`, `unraid_docker_restart`, `unraid_docker_pause`, `unraid_docker_unpause`, `unraid_docker_remove` |
 | Community Apps | `unraid_ca_search`, `unraid_ca_app`, `unraid_ca_install`, `unraid_ca_update`, `unraid_ca_remove` |
 | Container Settings | `unraid_template_get`, `unraid_template_edit` |
+| App APIs | `unraid_app_list`, `unraid_app_request` |
 | Plugins | `unraid_plugins_list`, `unraid_plugin_info`, `unraid_plugin_install`, `unraid_plugin_check_updates`, `unraid_plugin_update`, `unraid_plugin_remove` |
 | VMs | `unraid_vm_list`, `unraid_vm_inspect`, `unraid_vm_start`, `unraid_vm_stop`, `unraid_vm_pause`, `unraid_vm_resume`, `unraid_vm_force_stop`, `unraid_vm_reboot` |
 | Array | `unraid_array_status`, `unraid_array_start`, `unraid_array_stop`, `unraid_parity_status`, `unraid_parity_start`, `unraid_parity_pause`, `unraid_parity_resume`, `unraid_parity_cancel` |
@@ -538,6 +555,7 @@ Permissions use a `resource:action` format. Configure them from the WebGUI Permi
 | Docker | `docker:read`, `docker:create`, `docker:update`, `docker:delete` |
 | Community Apps | `ca:read`, `ca:create`, `ca:update`, `ca:delete` |
 | Container Settings | `template:read`, `template:update` |
+| App APIs | `apps:read`, `apps:update` |
 | Plugins | `plugins:read`, `plugins:create`, `plugins:update`, `plugins:delete` |
 | VMs | `vms:read`, `vms:update`, `vms:delete` |
 | Array & Storage | `array:read`, `array:update`, `disk:read`, `share:read`, `share:update` |
@@ -547,7 +565,7 @@ Permissions use a `resource:action` format. Configure them from the WebGUI Permi
 | Users | `me:read` |
 | Logs | `logs:read` |
 
-The WebGUI includes **Read Only**, **Docker Manager**, **VM Manager**, **Full Admin**, and **None** presets. Docker Manager includes all four `ca:` permissions. Read Only includes `plugins:read` and `template:read`. `template:update` must be enabled individually or through Full Admin. Plugin write permissions must be enabled individually or through Full Admin.
+The WebGUI includes **Read Only**, **Docker Manager**, **VM Manager**, **Full Admin**, and **None** presets. Docker Manager includes all four `ca:` permissions. Read Only includes `plugins:read`, `template:read` and `apps:read`. `template:update` and `apps:update` must be enabled individually or through Full Admin. Plugin write permissions must be enabled individually or through Full Admin.
 
 ## Architecture
 

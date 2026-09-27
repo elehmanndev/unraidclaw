@@ -261,7 +261,8 @@ with Settings > UnraidClaw in the WebGUI, and confirm before saving it.\n\n${glo
     const targets = (command.schema.required ?? []).filter(name => ["id", "name", "plugin"].includes(name));
     const alias = Object.entries(aliases).filter(([, name]) => name === command.name).map(([name]) => name);
     const properties = isGroup ? [] : Object.entries(command.schema.properties).map(([name, schema]) => {
-      const type = schema.enum ? schema.enum.map(String).join("|") : schema.type;
+      // A property with no type takes any JSON value, such as a request body.
+      const type = schema.enum ? schema.enum.map(String).join("|") : (schema.type ?? "json");
       return `    --${kebab(name)} ${schema.type === "boolean" ? `(also --no-${kebab(name)})` : `<${type}>`}${command.schema.required?.includes(name) ? " (required)" : ""}: ${schema.description ?? ""}`;
     });
     return [`  ${command.name}${targets.map(name => ` [${name}]`).join("")} (${command.readOnly ? "read-only" : "mutating"})${alias.length ? `, aliases: ${alias.join(", ")}` : ""}`,

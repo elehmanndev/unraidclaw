@@ -3,7 +3,7 @@
 // ── Permission presets (mirror of shared/permissions.ts) ──
 var OCC_PRESETS = {
   'read-only': [
-    'docker:read','ca:read','template:read','plugins:read','vms:read','array:read','disk:read','share:read',
+    'docker:read','ca:read','template:read','apps:read','plugins:read','vms:read','array:read','disk:read','share:read',
     'info:read','services:read','notification:read',
     'network:read','me:read','logs:read'
   ],
@@ -25,6 +25,7 @@ var OCC_CATEGORIES = {
   'docker':       ['docker:read','docker:create','docker:update','docker:delete'],
   'ca':           ['ca:read','ca:create','ca:update','ca:delete'],
   'template':     ['template:read','template:update'],
+  'apps':         ['apps:read','apps:update'],
   'plugins':      ['plugins:read','plugins:create','plugins:update','plugins:delete'],
   'vms':          ['vms:read','vms:update','vms:delete'],
   'storage':      ['array:read','array:update','disk:read','share:read','share:update'],
@@ -406,4 +407,115 @@ function escapeHtml(text) {
   var div = document.createElement('div');
   div.appendChild(document.createTextNode(text));
   return div.innerHTML;
+}
+
+// ── App keys ──
+// Keys go to app-keys.php by POST with Unraid's CSRF token, never in a URL,
+// and the page never gets a saved key back.
+function occAppKeyLabel(entry) {
+  if (entry.type === 'bearer') return 'Authorization: Bearer ***';
+  if (entry.type === 'basic') return 'Authorization: Basic (' + entry.username + ')';
+  if (entry.type === 'header') return entry.header + ': ***';
+  return 'unusable entry';
+}
+
+function occLoadAppKeys() {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/plugins/unraidclaw/php/app-keys.php?action=list', true);
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState !== 4) return;
+    var body = document.getElementById('occ-appkeys-body');
+    var resp;
+    try { resp = JSON.parse(xhr.responseText); } catch (e) { resp = null; }
+    if (!resp || !resp.success) {
+      body.innerHTML = '<tr><td colspan="3">Could not load App Keys.</td></tr>';
+      return;
+    }
+    body.innerHTML = '';
+    if (resp.keys.length === 0) {
+      body.innerHTML = '<tr><td colspan="3">No keys saved yet.</td></tr>';
+    }
+    resp.keys.forEach(function(entry) {
+      var tr = document.createElement('tr');
+      var name = document.createElement('td');
+      name.textContent = entry.name;
+      var how = document.createElement('td');
+      how.textContent = occAppKeyLabel(entry);
+      var actions = document.createElement('td');
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'occ-btn occ-btn-danger occ-btn-sm';
+      btn.textContent = 'Remove';
+      btn.onclick = function() { occDeleteAppKey(entry.name); };
+      actions.appendChild(btn);
+      tr.appendChild(name); tr.appendChild(how); tr.appendChild(actions);
+      body.appendChild(tr);
+    });
+    var select = document.getElementById('occ-appkey-name');
+    var current = select.value;
+    select.innerHTML = '';
+    resp.containers.forEach(function(c) {
+      var opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      select.appendChild(opt);
+    });
+    if (current) select.value = current;
+  };
+  xhr.send();
+}
+
+function occAppKeyTypeChanged() {
+  var type = document.getElementById('occ-appkey-type').value;
+  document.getElementById('occ-appkey-header-row').style.display = type === 'header' ? '' : 'none';
+  document.getElementById('occ-appkey-username-row').style.display = type === 'basic' ? '' : 'none';
+  document.getElementById('occ-appkey-value-label').textContent = type === 'basic' ? 'Password' : (type === 'bearer' ? 'Token' : 'Key');
+}
+
+function occPostAppKeys(fields, done) {
+  var params = ['csrf_token=' + encodeURIComponent(occGetCsrf())];
+  for (var k in fields) params.push(encodeURIComponent(k) + '=' + encodeURIComponent(fields[k]));
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/plugins/unraidclaw/php/app-keys.php', true);
+  xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState !== 4) return;
+    var resp;
+    try { resp = JSON.parse(xhr.responseText); } catch (e) { resp = { success: false, error: 'HTTP ' + xhr.status }; }
+    done(resp);
+  };
+  xhr.send(params.join('&'));
+}
+
+function occSaveAppKey(e) {
+  e.preventDefault();
+  var status = document.getElementById('occ-appkeys-status');
+  var valueInput = document.getElementById('occ-appkey-value');
+  occPostAppKeys({
+    action: 'save',
+    name: document.getElementById('occ-appkey-name').value,
+    type: document.getElementById('occ-appkey-type').value,
+    header: document.getElementById('occ-appkey-header').value,
+    username: document.getElementById('occ-appkey-username').value,
+    value: valueInput.value
+  }, function(resp) {
+    if (resp.success) {
+      valueInput.value = '';
+      status.textContent = 'Saved.';
+      status.style.color = '#51cf66';
+      occLoadAppKeys();
+    } else {
+      status.textContent = 'Error: ' + (resp.error || 'Unknown');
+      status.style.color = '#ff6b6b';
+    }
+    setTimeout(function() { status.textContent = ''; }, 5000);
+  });
+  return false;
+}
+
+function occDeleteAppKey(name) {
+  if (!confirm('Remove the key saved for ' + name + '?')) return;
+  occPostAppKeys({ action: 'delete', name: name }, function(resp) {
+    if (!resp.success) alert('Error: ' + (resp.error || 'Unknown'));
+    occLoadAppKeys();
+  });
 }

@@ -28,6 +28,7 @@ $certificateReadable = $certificate['present'] && !isset($certificate['error']);
   <button class="occ-tab active" onclick="occSwitchTab('dashboard', this)">Dashboard</button>
   <button class="occ-tab" onclick="occSwitchTab('settings', this)">Settings</button>
   <button class="occ-tab" onclick="occSwitchTab('permissions', this)">Permissions</button>
+  <button class="occ-tab" onclick="occSwitchTab('appkeys', this)">App Keys</button>
   <button class="occ-tab" onclick="occSwitchTab('log', this)">Activity Log</button>
 </div>
 
@@ -318,6 +319,23 @@ $certificateReadable = $certificate['present'] && !isset($certificate['error']);
       </div>
     </div>
 
+    <!-- App APIs -->
+    <div class="occ-perm-category">
+      <div class="occ-perm-header" onclick="occToggleCategory(this)">
+        <span class="occ-expand-icon">&#9654;</span>
+        <h3>App APIs</h3>
+        <span class="occ-perm-summary" data-category="apps"></span>
+        <div class="occ-cat-toggle">
+          <button type="button" class="occ-btn occ-btn-xs" onclick="event.stopPropagation(); occSetCategory('apps', true)">All</button>
+          <button type="button" class="occ-btn occ-btn-xs" onclick="event.stopPropagation(); occSetCategory('apps', false)">None</button>
+        </div>
+      </div>
+      <div class="occ-perm-body" style="display:none;">
+        <label class="occ-perm-item"><input type="checkbox" name="apps:read" data-category="apps" <?=!empty($permissions['apps:read']) ? 'checked' : ''?>><span class="occ-perm-label">Read</span><span class="occ-perm-desc">Send read-only requests (GET, HEAD) to an installed app's own API</span></label>
+        <label class="occ-perm-item occ-destructive"><input type="checkbox" name="apps:update" data-category="apps" <?=!empty($permissions['apps:update']) ? 'checked' : ''?>><span class="occ-perm-label">Change</span><span class="occ-perm-desc">Send requests that can change or delete an app's data (POST, PUT, PATCH, DELETE) to its own API (destructive)</span></label>
+      </div>
+    </div>
+
     <!-- Plugins -->
     <div class="occ-perm-category">
       <div class="occ-perm-header" onclick="occToggleCategory(this)">
@@ -468,6 +486,55 @@ $certificateReadable = $certificate['present'] && !isset($certificate['error']);
 </div>
 </div>
 
+<!-- ============ APP KEYS TAB ============ -->
+<div id="occ-tab-appkeys" class="occ-tab-content" style="display:none;">
+<div class="occ-log-viewer">
+  <h2>App Keys</h2>
+  <p class="occ-hint">When an agent calls an installed app's own API, UnraidClaw adds the key saved here for that app. The agent never sees the key: it is not shown on this page again, not returned by the API, and removed from anything the app sends back. Calling app APIs also needs the <b>App APIs</b> permissions.</p>
+
+  <table class="tablesorter" id="occ-appkeys-table">
+    <thead><tr><th>App</th><th>Sent as</th><th></th></tr></thead>
+    <tbody id="occ-appkeys-body"><tr><td colspan="3">Loading...</td></tr></tbody>
+  </table>
+
+  <h3 style="margin-top: 20px;">Add or replace a key</h3>
+  <form id="occ-appkeys-form" onsubmit="return occSaveAppKey(event);" autocomplete="off">
+    <table class="tablesorter shift ups">
+      <tbody>
+      <tr>
+        <td>App</td>
+        <td><select id="occ-appkey-name" name="name" required></select></td>
+      </tr>
+      <tr>
+        <td>Sent as</td>
+        <td>
+          <select id="occ-appkey-type" name="type" onchange="occAppKeyTypeChanged()">
+            <option value="header">A header, such as x-api-key</option>
+            <option value="bearer">Authorization: Bearer (token)</option>
+            <option value="basic">Authorization: Basic (user name and password)</option>
+          </select>
+        </td>
+      </tr>
+      <tr id="occ-appkey-header-row">
+        <td>Header name</td>
+        <td><input type="text" id="occ-appkey-header" name="header" value="x-api-key" maxlength="64" pattern="[A-Za-z0-9-]+"></td>
+      </tr>
+      <tr id="occ-appkey-username-row" style="display:none;">
+        <td>User name</td>
+        <td><input type="text" id="occ-appkey-username" name="username" maxlength="256"></td>
+      </tr>
+      <tr>
+        <td id="occ-appkey-value-label">Key</td>
+        <td><input type="password" id="occ-appkey-value" name="value" maxlength="4096" required autocomplete="new-password"></td>
+      </tr>
+      </tbody>
+    </table>
+    <button type="submit" class="occ-btn occ-btn-primary">Save key</button>
+    <span id="occ-appkeys-status" role="status" style="margin-left: 15px; font-weight: bold;"></span>
+  </form>
+</div>
+</div>
+
 <!-- ============ ACTIVITY LOG TAB ============ -->
 <div id="occ-tab-log" class="occ-tab-content" style="display:none;">
 <div class="occ-log-viewer">
@@ -527,6 +594,7 @@ function occSwitchTab(name, btn) {
   // Init tab content
   if (name === 'log') occRefreshLog();
   if (name === 'permissions') occUpdatePermissionSummaries();
+  if (name === 'appkeys') occLoadAppKeys();
 }
 
 document.addEventListener('DOMContentLoaded', function() {

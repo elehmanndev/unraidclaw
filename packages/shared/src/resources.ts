@@ -2,6 +2,7 @@ export enum Resource {
   DOCKER = "docker",
   CA = "ca",
   TEMPLATE = "template",
+  APPS = "apps",
   PLUGINS = "plugins",
   VMS = "vms",
   ARRAY = "array",
@@ -65,6 +66,14 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     permissions: [
       { key: "template:read", label: "View Settings", description: "Read an installed container's saved template, with masked values hidden" },
       { key: "template:update", label: "Edit & Rebuild", description: "Change any setting in an installed container's saved template, including privileged mode, devices, Extra Parameters and custom networks, and rebuild the container from it the way the Docker tab does", destructive: true },
+    ],
+  },
+  {
+    name: "App APIs",
+    description: "Send requests to the web API of an installed container, with the key saved for it on the App Keys tab",
+    permissions: [
+      { key: "apps:read", label: "Read", description: "Send read-only requests (GET, HEAD) to an installed app's own API" },
+      { key: "apps:update", label: "Change", description: "Send requests that can change or delete an app's data (POST, PUT, PATCH, DELETE) to its own API", destructive: true },
     ],
   },
   {
