@@ -14,6 +14,10 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://github.com/elehmanndev/unraidclaw" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
 
 <CHANGES>
+### 0.2.4
+- Refuse a device of /dev or /dev/ on a full install or a template edit. Templates use "/dev/" as a placeholder, and docker passes every host device for it. A device must name something under /dev, such as /dev/ttyUSB0 or /dev/dri
+- Leave a device overridden to "" out of the template, since Unraid's command builder turns an empty device into --device='' and docker refuses the container
+- Fix an override for one device of a template with several setting all of them. Devices have no container-side target, so overrides are now told apart by the field's name
 ### 0.2.3
 - Add full installs: POST /api/ca/app/:name/install with "full": true installs an app with every setting its template asks for, including privileged mode, Extra Parameters, Post Arguments, host devices, a MAC address and custom networks such as br0, where the plain install refuses them. A full install takes optional "settings", the same keys a template edit does, needs template:update as well as ca:create, and refuses a network that does not exist. Tailscale, extra networks and memory limits before Unraid 7.4 are still refused, because rebuild_container does not set them up
 ### 0.2.2
