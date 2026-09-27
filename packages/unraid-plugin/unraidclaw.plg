@@ -14,6 +14,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://github.com/elehmanndev/unraidclaw" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
 
 <CHANGES>
+### 0.2.2
+- Fix saving a key on the App Keys tab failing with "Error: HTTP 200". The settings page sent Unraid a CSRF token from the wrong place, which only POST requests check; it now uses var.ini's csrf_token like Unraid's own pages
+- The activity log now shows what an app API call sent, such as DELETE /api/albums/42, next to the route, with saved keys redacted from query strings
 ### 0.2.1
 - Add app APIs: POST /api/apps/:name/request sends one HTTP request to the web API of an installed container, found from docker inspect so a caller never supplies a host, and GET /api/apps lists where requests go. A key saved for the app on the new App Keys tab is added as a header, Bearer or Basic authorization and redacted from everything returned; no API returns a key. New permissions apps:read (GET, HEAD) and apps:update (everything else), both off by default, and new tools unraid_app_list and unraid_app_request
 ### 0.2.0

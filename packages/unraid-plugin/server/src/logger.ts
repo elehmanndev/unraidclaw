@@ -12,6 +12,8 @@ export interface ActivityLogEntry {
   ip: string;
   /** Set on MCP tool calls. */
   tool?: string;
+  /** What a route did beyond its own path, such as the request an app API call sent. */
+  detail?: string;
 }
 
 /** Derives the logged resource and action from an API request. */

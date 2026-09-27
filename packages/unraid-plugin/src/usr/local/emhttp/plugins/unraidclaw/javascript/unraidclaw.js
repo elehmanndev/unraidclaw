@@ -399,6 +399,7 @@ function occResetDefaults() {
 // MCP requests the action, after it. Returns escaped HTML.
 function occLogPath(e) {
   var detail = e.tool || (e.path === '/mcp' ? e.action : '');
+  if (e.detail) detail = (detail ? detail + ' ' : '') + e.detail;
   return escapeHtml(e.path) + (detail ? ' ' + escapeHtml(detail) : '');
 }
 

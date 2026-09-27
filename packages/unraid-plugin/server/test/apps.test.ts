@@ -317,3 +317,19 @@ test("the app list says where requests go and which apps have a key, never the k
   ]);
   assert.doesNotMatch(res.body, new RegExp(KEY));
 });
+
+test("the activity log is told what was sent to the app", async () => {
+  await setPermissions({ "apps:read": true, "apps:update": true });
+  const keysFile = join(await mkdtemp(join(tmpdir(), "unraidclaw-keys-")), "app-keys.json");
+  await writeFile(keysFile, JSON.stringify(IMMICH_KEY), "utf8");
+  const app = Fastify();
+  const logged: Array<string | undefined> = [];
+  app.addHook("onResponse", async (request) => {
+    logged.push(request.activityDetail);
+  });
+  registerAppRoutes(app, createAppsRuntime({ run: fakeDocker([IMMICH]).run, readKeys: () => readAppKeys(keysFile) }));
+  await app.ready();
+  await call(app, "immich", { method: "DELETE", path: "/api/albums/42", dryRun: true });
+  await call(app, "immich", { path: `/echo?token=${KEY}` });
+  assert.deepEqual(logged, ["dry run DELETE /api/albums/42", "GET /echo?token=***"]);
+});

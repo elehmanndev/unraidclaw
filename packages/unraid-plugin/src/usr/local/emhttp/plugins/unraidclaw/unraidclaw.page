@@ -577,7 +577,8 @@ $certificateReadable = $certificate['present'] && !isset($certificate['error']);
 </div>
 </div>
 
-<div id="occ-app" data-csrf="<?=htmlspecialchars($_SERVER['HTTP_CSRF_TOKEN'] ?? '', ENT_QUOTES)?>"></div>
+<?php /* Unraid checks POST requests against var.ini's csrf_token, which is what its own pages use. */ ?>
+<div id="occ-app" data-csrf="<?=htmlspecialchars($var['csrf_token'] ?? ($_SERVER['HTTP_CSRF_TOKEN'] ?? ''), ENT_QUOTES)?>"></div>
 <script src="/plugins/<?=$plugin?>/javascript/unraidclaw.js?v=<?=filemtime("/usr/local/emhttp/plugins/{$plugin}/javascript/unraidclaw.js")?>"></script>
 <script>
 

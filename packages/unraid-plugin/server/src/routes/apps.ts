@@ -23,6 +23,13 @@ import { keyHeaderValue, keySecrets, readAppKeys, type AppKey } from "../app-key
 
 const execFileAsync = promisify(execFile);
 
+declare module "fastify" {
+  interface FastifyRequest {
+    /** Logged with the request: the method and path sent to the app. */
+    activityDetail?: string;
+  }
+}
+
 const DOCKER_TIMEOUT_MS = 30_000;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 5 * 60_000;
@@ -350,6 +357,10 @@ export function registerAppRoutes(app: FastifyInstance, runtime: AppsRuntime = c
 
         const key = (await runtime.readKeys()).get(name) ?? null;
         const secrets = key ? keySecrets(key) : [];
+        // The activity log shows what was done inside the app, not only that
+        // an app was called. The key never travels in the path, but a query
+        // string can carry other secrets, so it is redacted and kept short.
+        req.activityDetail = `${body.dryRun ? "dry run " : ""}${body.method} ${redactSecrets(secrets, body.path).slice(0, 200)}`;
         const headers: Record<string, string> = { accept: "application/json, text/plain;q=0.9, */*;q=0.5", ...(body.headers ?? {}) };
         if (key) {
           for (const h of Object.keys(headers)) {
