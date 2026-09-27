@@ -4,7 +4,7 @@
 
 <h1 align="center">UnraidClaw</h1>
 
-> This is a fork of [UnraidClaw](https://github.com/emaspa/unraidclaw) by emaspa. It adds editing an installed container's settings, with more to come. Install it from `https://raw.githubusercontent.com/elehmanndev/unraidclaw/main/packages/unraid-plugin/unraidclaw.plg` with **Plugins > Install Plugin**. It replaces an installed UnraidClaw in place and keeps its settings. The Community Applications listing installs the original.
+> This is a fork of [UnraidClaw](https://github.com/emaspa/unraidclaw) by emaspa. It adds editing an installed container's settings, with more to come. Install it from `https://raw.githubusercontent.com/elehmanndev/unraidclaw/main/packages/unraid-plugin/unraidclaw.plg` with **Plugins > Install Plugin**. It replaces an installed UnraidClaw in place and keeps its settings. The Community Applications listing installs the original. A weekly workflow opens a pull request here when the original has new commits.
 
 <p align="center">
   AI Agent Gateway for Unraid. Permission-enforcing REST API and MCP server that allows AI agents to manage your server.

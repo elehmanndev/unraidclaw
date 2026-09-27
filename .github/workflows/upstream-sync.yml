@@ -1,0 +1,72 @@
+name: Upstream sync
+
+# Once a week, look for new commits in the original UnraidClaw repository and
+# open, or refresh, a pull request that shows them. Nothing is merged or
+# released here: the pull request is the notice. Merging it means resolving the
+# lines both sides change in packages/unraid-plugin/unraidclaw.plg (keep this
+# fork's author, repo, support, version and md5), then releasing as usual.
+#
+# A pull request opened with the workflow token does not start CI on its own.
+# CI runs once the merge is done on a branch of this repository.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'elehmanndev/unraidclaw'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/emaspa/unraidclaw.git
+          git fetch --no-tags upstream main
+
+      - name: Open or refresh the sync pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NEW="$(git rev-list --count origin/main..upstream/main)"
+          if [ "$NEW" -eq 0 ]; then
+            echo "Up to date with emaspa/unraidclaw."
+            exit 0
+          fi
+          echo "$NEW upstream commit(s) not in main."
+
+          # The branch always holds upstream's main as it is, so the pull
+          # request shows exactly what upstream changed and where it conflicts.
+          git push --force origin refs/remotes/upstream/main:refs/heads/upstream-sync
+
+          {
+            echo "emaspa/unraidclaw has $NEW commit(s) that are not in this fork's main:"
+            echo
+            echo '```'
+            git log --no-merges --format='%h %s (%an, %as)' origin/main..upstream/main | head -60
+            echo '```'
+            echo
+            echo "To bring them in, merge \`upstream/main\` into a branch of this repository, keep this fork's author, repo, support, version and md5 lines in \`packages/unraid-plugin/unraidclaw.plg\`, and release as the next 0.x version. Do not merge this pull request directly."
+          } > "$RUNNER_TEMP/body.md"
+
+          OPEN="$(gh pr list --head upstream-sync --state open --json number -q '.[0].number')"
+          if [ -n "$OPEN" ]; then
+            gh pr edit "$OPEN" --title "Upstream: $NEW new commit(s) from emaspa/unraidclaw" --body-file "$RUNNER_TEMP/body.md"
+            echo "Refreshed pull request #$OPEN."
+          else
+            gh pr create --base main --head upstream-sync \
+              --title "Upstream: $NEW new commit(s) from emaspa/unraidclaw" \
+              --body-file "$RUNNER_TEMP/body.md"
+          fi
