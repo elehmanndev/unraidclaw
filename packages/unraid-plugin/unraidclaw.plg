@@ -3,12 +3,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "unraidclaw">
 <!ENTITY author    "elehmanndev">
-<!ENTITY version   "0.2.2">
+<!ENTITY version   "0.2.3">
 <!ENTITY launch    "Settings/unraidclaw">
 <!ENTITY repo      "elehmanndev/unraidclaw">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/&repo;/main/packages/unraid-plugin/unraidclaw.plg">
 <!ENTITY pkgURL    "https://github.com/&repo;/releases/download/v&version;/&name;-&version;-x86_64-1.txz">
-<!ENTITY md5       "f4441c752d60ed8094a29fef89899ab1">
+<!ENTITY md5       "5beeab9d33602f59b0d71db5057d9208">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://github.com/elehmanndev/unraidclaw" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
