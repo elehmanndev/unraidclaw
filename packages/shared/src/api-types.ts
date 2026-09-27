@@ -394,6 +394,67 @@ export interface TemplateEditResponse {
   warnings: string[];
 }
 
+// ── App APIs ────────────────────────────────────────────
+
+/** How a saved app key is sent. Values are never returned by the API. */
+export type AppKeyType = "header" | "bearer" | "basic";
+
+/** An installed container whose own API can be called, as `GET /api/apps` lists it. */
+export interface AppTarget {
+  /** Container name, the id used everywhere in this API. */
+  name: string;
+  running: boolean;
+  /** Where requests go by default, e.g. "http://172.17.0.5:8096". Null when it cannot be worked out. */
+  baseUrl: string | null;
+  /** Container-side TCP ports the container exposes. */
+  ports: number[];
+  /** Whether a key is saved for this app on the App Keys tab, and how it is sent. */
+  key: { type: AppKeyType; header: string } | null;
+}
+
+export type AppRequestMethod = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+export interface AppRequest {
+  method?: AppRequestMethod;
+  /** Path on the app, starting with "/", optionally with a query string. */
+  path: string;
+  query?: Record<string, string | number | boolean>;
+  headers?: Record<string, string>;
+  /** A string is sent as is; anything else is sent as JSON. */
+  body?: unknown;
+  /** Container-side port, when the app listens on more than one. */
+  port?: number;
+  /** Use HTTPS. Defaults to what the container's WebUI link says. */
+  https?: boolean;
+  /** Give up after this long. Default 30 s, at most 5 min. */
+  timeoutMs?: number;
+  dryRun?: boolean;
+}
+
+export interface AppRequestResponse {
+  dryRun: boolean;
+  name: string;
+  method: AppRequestMethod;
+  url: string;
+  /** Whether a saved key was added to the request, and in which header. */
+  key: { type: AppKeyType; header: string } | null;
+  /** The request headers sent, with the key shown as `***`. */
+  requestHeaders: Record<string, string>;
+  /** Absent on a dry run. */
+  status?: number;
+  statusText?: string;
+  headers?: Record<string, string>;
+  /** The body parsed, when the app answered with JSON. */
+  json?: unknown;
+  /** The body as text otherwise. */
+  text?: string;
+  /** Size of the body in bytes, when it was not text. */
+  binaryBytes?: number;
+  /** True when the body was cut off at the size limit. */
+  truncated?: boolean;
+  durationMs?: number;
+}
+
 // ── Plugins (.plg) ──────────────────────────────────────
 
 export interface PluginSummary {

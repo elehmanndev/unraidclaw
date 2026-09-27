@@ -1,6 +1,6 @@
 ---
 name: unraidclaw
-description: Manage your Unraid server through AI agents - 57 tools for Docker, Community Applications, container settings, Unraid plugins, VMs, array, shares, system, notifications, and more with permission control.
+description: Manage your Unraid server through AI agents - 59 tools for Docker, Community Applications, container settings, app APIs, Unraid plugins, VMs, array, shares, system, notifications, and more with permission control.
 ---
 
 # UnraidClaw
@@ -9,11 +9,12 @@ Manage your Unraid server through AI agents with full permission control.
 
 ## What it does
 
-UnraidClaw gives AI agents 57 tools across 14 categories to monitor and manage an Unraid server:
+UnraidClaw gives AI agents 59 tools across 15 categories to monitor and manage an Unraid server:
 
 - **Docker** - List, inspect, start, stop, restart, pause, unpause, remove, and create containers
 - **Community Applications** - Search the CA catalog, read an app's template, install an app as a container, update an installed app to a newer image, and remove one
 - **Container Settings** - Read an installed container's saved settings, and change any of them and rebuild it the way the Docker tab does
+- **App APIs** - Read or change things inside an installed app through its own web API, with the key the user saved for it
 - **Plugins** - List and inspect installed .plg plugins, install one from a URL, check for updates, update, and remove
 - **VMs** - List, inspect, start, stop, force-stop, pause, resume, and reboot virtual machines
 - **Array** - View array status, start/stop array, run parity checks
@@ -26,7 +27,7 @@ UnraidClaw gives AI agents 57 tools across 14 categories to monitor and manage a
 - **Logs** - Read syslog entries
 - **Health** - Server health check
 
-Tools use a 32-key permission matrix (resource:action) configurable from the Unraid WebGUI; health requires no permission. Activity logging excludes the public health probe, successful MCP handshakes and MCP GET/DELETE responses with status 405. The gateway also has an optional MCP endpoint, off by default, that exposes the same tools to MCP clients; this plugin does not use it.
+Tools use a 34-key permission matrix (resource:action) configurable from the Unraid WebGUI; health requires no permission. Activity logging excludes the public health probe, successful MCP handshakes and MCP GET/DELETE responses with status 405. The gateway also has an optional MCP endpoint, off by default, that exposes the same tools to MCP clients; this plugin does not use it.
 
 ## Updating and removing an installed app
 
@@ -47,6 +48,14 @@ Name only what should change: settings and entries the request leaves out are ke
 Always run it with `dryRun: true` first. Show the user the changes and the command, and ask before running it for real. If the rebuilt container does not start or stops within a few seconds, the original comes back unchanged and the error carries the new container's last log lines. Read them, explain what went wrong, and propose a corrected edit.
 
 This tool changes settings, not the app version. An unchanged image is not pulled, so use `unraid_ca_update` to update an app. Changing `Repository` to another tag pulls that tag.
+
+## Changing things inside an app
+
+Many requests are about an app's own data, not its container: add an album in Immich, a proxy host in Nginx Proxy Manager, a series in Sonarr. Use `unraid_app_request` for those, with the installed container name and a path from the app's API documentation. Never pass a host or ask for a URL: the server finds the container itself.
+
+Keys are the user's to manage. If the app needs one, it is added automatically when the user has saved it under Settings, UnraidClaw, App Keys, and `unraid_app_list` shows which apps have one. Never ask the user to paste a key, token or password into the chat. If the app answers 401 or 403, tell the user to add or check the key on that tab.
+
+Look before you change: GET first to see the current state. For anything that creates, changes or deletes, call with `dryRun: true`, show the user the request, and ask before sending it. The app's status code is in the result, so a 404 or 422 from the app is information to act on, not a tool failure.
 
 ## Plugins
 

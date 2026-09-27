@@ -3,6 +3,8 @@
   "name": "UnraidClaw",
   "contracts": {
     "tools": [
+      "unraid_app_list",
+      "unraid_app_request",
       "unraid_array_start",
       "unraid_array_status",
       "unraid_array_stop",

@@ -1,6 +1,6 @@
 # UnraidClaw command-line client
 
-The `unraidclaw-cli` package provides the `unraidclaw` command, which manages one UnraidClaw gateway through its REST API. It uses the same 57 tool definitions, read-only classification and gateway permissions as OpenClaw and MCP. It runs on Unraid and on Linux, macOS and Windows with Node.js 22 or newer, as a single CommonJS bundle with no runtime `node_modules`.
+The `unraidclaw-cli` package provides the `unraidclaw` command, which manages one UnraidClaw gateway through its REST API. It uses the same 59 tool definitions, read-only classification and gateway permissions as OpenClaw and MCP. It runs on Unraid and on Linux, macOS and Windows with Node.js 22 or newer, as a single CommonJS bundle with no runtime `node_modules`.
 
 The OpenClaw plugin is a separate npm package named `unraidclaw`. Install `unraidclaw-cli` for the command-line client.
 
