@@ -199,11 +199,28 @@ REST authentication uses the `x-api-key: <api-key>` header. `/api/health` is pub
   "restart": "unless-stopped",
   "network": "bridge",
   "icon": "https://example.com/icon.png",
-  "webui": "http://[IP]:[PORT:3456]/"
+  "webui": "http://[IP]:[PORT:3456]/",
+  "extraArgs": "--gpus all --memory=8g",
+  "postArgs": "--config /config/app.yml",
+  "staticIp": "192.168.1.50",
+  "privileged": false,
+  "cpuset": "0-3",
+  "devices": ["/dev/dri"]
 }
 ```
 
 Only `image` is required. The container is started immediately and an Unraid dockerMan XML template is created so it appears in the Docker tab.
+
+The last six fields are the advanced settings of Unraid's own container form, and each is saved to the same template field, so the Docker tab shows them and rebuilds the container the same way:
+
+- `extraArgs` is Unraid's Extra Parameters: docker run options, space separated, such as `--gpus all`, `--cap-add=SYS_ADMIN`, `--memory=8g`, `--shm-size=1g` or `--hostname=media`. It must start with an option. Networks belong in `network`, not here.
+- `postArgs` is Unraid's Post Arguments: the command appended after the image, space separated.
+- `staticIp` is Unraid's Fixed IP address, IPv4 or IPv6, passed as `--ip` or `--ip6`. Docker only accepts it on a user-defined network such as a macvlan, ipvlan or custom bridge, so the gateway rejects it with `bridge`, `host` and `none`.
+- `privileged` must be a real boolean and defaults to false.
+- `cpuset` pins the container to CPUs, as `--cpuset-cpus` reads it, for example `0-3,8`.
+- `devices` passes host devices through, as `--device` reads them: `/dev/dri`, or `/dev/ttyUSB0:/dev/ttyUSB0:rwm`.
+
+Unraid passes Extra Parameters and Post Arguments to the shell unescaped whenever a container is rebuilt from its template, so both accept only letters, digits, `: . , / + = _ -` and single spaces between tokens. Quotes, other whitespace and shell metacharacters are rejected with `400` before docker runs. Every value reaches docker through an argument list, never a shell. A container created with any of these settings in effect is refused by `POST /api/ca/app/:name/update`, which rebuilds only settings it can reproduce exactly. Update it from the Docker tab instead.
 
 ### Community Applications
 

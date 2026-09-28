@@ -128,11 +128,49 @@ test("docker create rejects wrong types, labels and traversal before mkdir", asy
   registerDockerRoutes(app, graphql(), { run: runner.run, mkdir: async () => { throw new Error("Unexpected mkdir"); } });
   for (const payload of [[], { image: "alpine", extra: 1 }, { image: 4 },
     ...["ports", "volumes", "env"].flatMap((key) => [{ image: "alpine", [key]: "x" }, { image: "alpine", [key]: [3] }]),
-    ...["name", "restart", "network", "icon", "webui"].map((key) => ({ image: "alpine", [key]: 1 })),
+    ...["name", "restart", "network", "icon", "webui", "extraArgs", "postArgs", "staticIp", "cpuset"].map((key) => ({ image: "alpine", [key]: 1 })),
     ...[[], null, { x: 2 }, { "x=y": "z" }, { "-x": "y" }].map((labels) => ({ image: "alpine", labels })),
     { image: "alpine", volumes: ["/mnt/../../tmp/escape:/data"] },
+    { image: "alpine", devices: "/dev/dri" }, { image: "alpine", devices: [1] },
+    ...["true", 1, null].map((privileged) => ({ image: "alpine", privileged })),
+    // Extra Parameters and Post Arguments end up in a shell command line when
+    // Unraid rebuilds the container, so nothing the shell could act on passes.
+    ...["", " --gpus all", "--gpus  all", "--gpus all;rm -rf /", "--gpus `id`", "--gpus all && curl evil", "--gpus $(id)",
+      "--label a='b c'", "--hostname\tx", "-".repeat(2049), "alpine --privileged", "busybox"].flatMap((value) => [{ image: "alpine", extraArgs: value }, ...(value.startsWith("-") || value === "" ? [{ image: "alpine", postArgs: value }] : [])]),
+    ...["not-an-ip", "999.999.999.999", "192.168.2.50/24", "fe80::1%eth0"].map((staticIp) => ({ image: "alpine", network: "br0", staticIp })),
+    ...["bridge", "host", "none", "Bridge"].map((network) => ({ image: "alpine", network, staticIp: "192.168.2.50" })),
+    { image: "alpine", staticIp: "192.168.2.50" },
+    ...["", "a", "0,", "0-", "-1", "0 1", "0;1"].map((cpuset) => ({ image: "alpine", cpuset })),
+    ...["dri", "/dev/dri:dri", "/dev/dri:/dev/dri:x", "/dev/../etc/passwd", "/dev/dri:/../x", "/dev/dri;id", "/dev/dri /dev/snd"].map((device) => ({ image: "alpine", devices: [device] })),
   ]) assert.equal((await app.inject({ method: "POST", url: "/api/docker/containers", payload })).statusCode, 400, JSON.stringify(payload));
   assert.equal(runner.calls.length, 0);
+});
+test("docker create passes Unraid's advanced settings to docker run in Unraid's order and records them in the template", async (t) => {
+  const dir = await mkdtemp(join(root, "templates-advanced-")); const app = Fastify(); t.after(() => app.close());
+  const runner = recorder((args) => args[0] === "run" ? "abcdef" : JSON.stringify([{ Id: "abcdef", Name: "/gpu-app", Config: { Image: "alpine" }, State: { Status: "running" } }]));
+  registerDockerRoutes(app, graphql(), { run: runner.run, templatesDir: dir, mkdir: (async () => {}) as typeof mkdir });
+  const payload = {
+    image: "alpine", name: "gpu-app", network: "br0", staticIp: "192.168.2.50", privileged: true, cpuset: "0-3,8",
+    devices: ["/dev/dri", "/dev/ttyUSB0:/dev/ttyUSB0:rwm"], env: ["TZ=UTC"], extraArgs: "--gpus all --memory=8g", postArgs: "--config /config/app.yml",
+  };
+  const res = await app.inject({ method: "POST", url: "/api/docker/containers", payload });
+  assert.equal(res.json().data.verified, true, res.body);
+  assert.deepEqual(runner.calls[0].args, [
+    "run", "-d", "--name", "gpu-app", "--restart", "unless-stopped", "--network", "br0", "--ip", "192.168.2.50", "--cpuset-cpus", "0-3,8", "--privileged=true",
+    "-e", "TZ=UTC", "--device", "/dev/dri", "--device", "/dev/ttyUSB0:/dev/ttyUSB0:rwm", "--label", "net.unraid.docker.managed=dockerman",
+    "--gpus", "all", "--memory=8g", "--", "alpine", "--config", "/config/app.yml",
+  ]);
+  const xml = await readFile(join(dir, "my-gpu-app.xml"), "utf8");
+  for (const expected of ["<MyIP>192.168.2.50</MyIP>", "<Privileged>true</Privileged>", "<ExtraParams>--gpus all --memory=8g</ExtraParams>",
+    "<PostArgs>--config /config/app.yml</PostArgs>", "<CPUset>0-3,8</CPUset>",
+    '<Config Name="Device /dev/dri" Target="" Default="" Mode="" Description="" Type="Device" Display="always" Required="false" Mask="false">/dev/dri</Config>',
+    '<Config Name="Device /dev/ttyUSB0" Target="" Default="" Mode="" Description="" Type="Device" Display="always" Required="false" Mask="false">/dev/ttyUSB0:/dev/ttyUSB0:rwm</Config>',
+  ]) assert.ok(xml.includes(expected), expected);
+  // An IPv6 address goes to --ip6, as Unraid does with its Fixed IP field.
+  runner.calls.length = 0;
+  assert.equal((await app.inject({ method: "POST", url: "/api/docker/containers", payload: { image: "alpine", name: "gpu-app", network: "br0", staticIp: "fd00::50" } })).statusCode, 200);
+  assert.ok(runner.calls[0].args.join(" ").includes("--ip6 fd00::50"));
+  assert.match(await readFile(join(dir, "my-gpu-app.xml"), "utf8"), /<MyIP>fd00::50<\/MyIP>[\s\S]*<Privileged>false<\/Privileged>[\s\S]*<ExtraParams><\/ExtraParams>[\s\S]*<PostArgs><\/PostArgs>[\s\S]*<CPUset><\/CPUset>/);
 });
 const uuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 test("VM actions return identity and verify state with bounded asynchronous polling", async (t) => {

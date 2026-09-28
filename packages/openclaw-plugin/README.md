@@ -135,6 +135,8 @@ Once installed and configured, ask your agent:
 
 `unraid_ca_update` and `unraid_ca_remove` act on an installed app, so their `name` is the container's name from the Docker tab, not the app's name in the catalog. Update keeps the configuration saved on the server and restores the running or stopped state; remove deletes the container and leaves appdata, volumes, the image and the template alone. Both take `dryRun`.
 
+`unraid_docker_create` takes `image` plus optional `name`, `ports`, `volumes`, `env`, `restart` and `network`, and the advanced settings of Unraid's container form: `extraArgs` (Extra Parameters, docker run options such as `--gpus all` or `--memory=8g`), `postArgs` (Post Arguments, the container command), `staticIp` (a fixed IPv4 or IPv6 address, which needs a macvlan, ipvlan or custom bridge network), `privileged`, `cpuset` and `devices`. Each is saved to the matching field of the container's template. The two free-form fields accept only letters, digits, `: . , / + = _ -` and single spaces, because Unraid passes them to the shell unescaped when it rebuilds a container. A container created with any of these settings in effect cannot be rebuilt by `unraid_ca_update`, which refuses settings it does not reproduce exactly; use the Docker tab for it.
+
 The six plugin tools manage Unraid `.plg` plugins through Unraid's own plugin manager. Installing one runs vendor code as root, checking for an update downloads a plugin file and stages it, and removing one runs the plugin's removal script, which may take its data with it. All four mutating tools take `dryRun`.
 
 Tools use the gateway's 30-key `resource:action` permission matrix configured from the Unraid WebGUI. Health requires no permission.
