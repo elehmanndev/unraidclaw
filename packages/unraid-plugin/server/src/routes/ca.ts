@@ -9,6 +9,8 @@ import type {
   CaSearchResponse,
   CaUpdatePlan,
   CaUpdateResponse,
+  ProfileApplied,
+  SetupProfile,
 } from "@unraidclaw/shared";
 import { requirePermission } from "../permissions.js";
 import { getPermissions } from "../config.js";
@@ -24,6 +26,7 @@ import {
   computeBlockers,
   hostPaths,
   missingRequired,
+  overrideKey,
   resolveOverrides,
   resolveTemplate,
   validateResolved,
@@ -42,6 +45,7 @@ import {
   type ContainerFacts,
   type SavedTemplate,
 } from "../ca-saved-template.js";
+import { applyProfile, readProfile } from "../profile.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFile, readdir, writeFile, mkdir, chown, stat } from "node:fs/promises";
@@ -92,6 +96,8 @@ export interface CaRuntime {
   readTemplateFile(path: string): Promise<string>;
   /** Unraid's timezone and server name, which it injects into every container. */
   readHostVars(): Promise<{ timeZone: string | null; hostName: string | null }>;
+  /** The owner's setup profile, which fills fields an install leaves unset. */
+  readProfile(): Promise<SetupProfile>;
 }
 
 /** `key="value"` lines, which is all var.ini is. */
@@ -196,6 +202,7 @@ export function createCaRuntime(overrides: Partial<CaRuntime> = {}): CaRuntime {
           return { timeZone: null, hostName: null };
         }
       }),
+    readProfile: overrides.readProfile ?? (() => readProfile()),
   };
 }
 
@@ -216,7 +223,7 @@ const REPO_QUERY_SCHEMA = {
   properties: { repo: { type: "string", maxLength: 200 } },
 } as const;
 
-const INSTALL_BODY_FIELDS = ["repo", "name", "overrides", "dryRun", "full", "settings"] as const;
+const INSTALL_BODY_FIELDS = ["repo", "name", "overrides", "dryRun", "full", "settings", "useProfile"] as const;
 
 /**
  * Validate the install body ourselves rather than through a JSON schema.
@@ -259,6 +266,9 @@ export function parseInstallBody(raw: unknown): CaInstallRequest {
   }
   if (body.full !== undefined && typeof body.full !== "boolean") {
     fail(`"full" must be true or false, not ${JSON.stringify(body.full)}.`, { field: "full" });
+  }
+  if (body.useProfile !== undefined && typeof body.useProfile !== "boolean") {
+    fail(`"useProfile" must be true or false, not ${JSON.stringify(body.useProfile)}.`, { field: "useProfile" });
   }
   if (body.settings !== undefined) {
     if (body.full !== true) fail('"settings" is only accepted on a full install. Pass "full": true as well.', { field: "settings" });
@@ -660,8 +670,14 @@ export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = crea
 
       let plan;
       let resolved;
+      let fromProfile: ProfileApplied[] = [];
       try {
-        const overrides = resolveOverrides(app_.config, body.overrides);
+        let overrides = resolveOverrides(app_.config, body.overrides);
+        // The owner's usual values fill what the caller left unset, before the
+        // required-field check, so a profile value can satisfy one.
+        if (body.useProfile !== false) {
+          ({ overrides, applied: fromProfile } = applyProfile(app_.config, overrides, await runtime.readProfile(), overrideKey));
+        }
 
         const missing = missingRequired(app_.config, overrides);
         if (missing.length > 0) {
@@ -697,8 +713,14 @@ export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = crea
         plan.full = true;
         plan.settings = fullSettings;
       }
+      if (fromProfile.length > 0) plan.profile = fromProfile;
 
       const warnings: string[] = [];
+      if (fromProfile.length > 0) {
+        warnings.push(
+          `Filled from the setup profile: ${fromProfile.map((a) => `${a.field} = ${a.value}`).join("; ")}. Pass useProfile=false to keep the template's defaults, or set a field in overrides.`
+        );
+      }
       if (fullSettings) {
         const extras = [
           fullSettings.Privileged === "true" ? "privileged mode" : "",

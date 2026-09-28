@@ -23,8 +23,8 @@ UnraidClaw sits between AI agents and your Unraid servers. It provides a REST AP
 
 ## Features
 
-- **66 tools** across 17 categories: Health, Docker, Community Applications, Container Settings, App APIs, Compose Stacks, Background Jobs, Plugins, VMs, Array, Disks, Shares, System, Notifications, Network, Users, Logs
-- **38 permission keys** in a resource:action matrix, configurable from the WebGUI
+- **68 tools** across 18 categories: Health, Docker, Community Applications, Container Settings, App APIs, Compose Stacks, Background Jobs, Setup Profile, Plugins, VMs, Array, Disks, Shares, System, Notifications, Network, Users, Logs
+- **40 permission keys** in a resource:action matrix, configurable from the WebGUI
 - **HTTPS** with auto-generated self-signed TLS certificate
 - **SHA-256 API key** authentication
 - **Activity logging** with JSONL format, filter, and search
@@ -161,6 +161,8 @@ REST authentication uses the `x-api-key: <api-key>` header. `/api/health` is pub
 | **Background Jobs** | POST | `/api/jobs` | `jobs:create`, plus the job's own tool permission |
 | | GET | `/api/jobs` | `jobs:read` |
 | | GET | `/api/jobs/:id` | `jobs:read` |
+| **Setup Profile** | GET | `/api/profile` | `profile:read` |
+| | POST | `/api/profile` | `profile:update` |
 | **Plugins** | GET | `/api/plugins` | `plugins:read` |
 | | GET | `/api/plugins/:file` | `plugins:read` |
 | | POST | `/api/plugins/install` | `plugins:create` |
@@ -250,7 +252,7 @@ Installation returns 422 for unsupported templates: Extra Parameters, Post Argum
 
 Unraid 7.4 templates can set a memory limit and a list of Additional Networks. On 7.4 the limit is written into the saved template and shown in the command preview, so the container is created with it and later updates keep it. Unraid 7.0 through 7.3 do not read the new `<Memory>` template field, so a template that sets it returns 422 there instead of installing an app whose limit would never apply. The same happens when the server's version cannot be read. An unreadable limit, a nonzero limit below Docker's 6 MB minimum, or a limit above UnraidClaw's exact numeric range returns 422 before anything is written or run. Additional Networks are refused rather than dropped, because Unraid attaches them with a second `docker network connect` step that UnraidClaw does not run.
 
-Host paths are used as written. Supply overrides if you relocated appdata; UnraidClaw does not apply CA's path-rewriting rules. A missing `/mnt` pool or share root returns 400 rather than creating a directory on Unraid's RAM filesystem.
+Host paths are used as written, apart from what the [setup profile](#setup-profile) fills in. Supply overrides if you relocated appdata, or set `appdataRoot` in the profile; UnraidClaw does not apply CA's path-rewriting rules. A missing `/mnt` pool or share root returns 400 rather than creating a directory on Unraid's RAM filesystem.
 
 An existing container or `my-<name>.xml` template returns 409 and is not overwritten. A failed install keeps its template so you can inspect it and finish from the Docker tab.
 
@@ -351,6 +353,30 @@ Two jobs run at a time and the rest wait. When one finishes, an Unraid notificat
 
 `GET /api/jobs` lists jobs newest first and `GET /api/jobs/:id` returns one with the tool's result or error. The arguments are not kept in what is returned, since they can hold secrets. Jobs live in memory: the last 50 finished ones are kept, and a service restart forgets them. The key a queued job needs is held only until it finishes.
 
+### Setup profile
+
+The setup profile holds the owner's usual install settings, in `/boot/config/plugins/unraidclaw/profile.json`. Every Community Applications install, plain or full, fills a template field from it when the request leaves that field unset:
+
+```json
+{
+  "variables": { "TZ": "Europe/Madrid", "PUID": "99", "PGID": "100", "UMASK": "022" },
+  "paths": { "/media": "/mnt/user/Media", "/downloads": "/mnt/user/downloads" },
+  "appdataRoot": "/mnt/user/appdata",
+  "notes": "Expose web apps through Nginx Proxy Manager, never with a published port on the WAN."
+}
+```
+
+- `variables` fill template variables by name.
+- `paths` fill template paths by the path inside the container, with or without a trailing slash.
+- `appdataRoot` moves a template default under any pool's appdata folder, such as `/mnt/cache/appdata/plex`, to the same place under this folder, when `paths` has no entry for that target.
+- `notes` are the owner's conventions for an agent to read. Nothing applies them.
+
+A value in the request's `overrides` always wins, a dropdown field keeps its default when the profile value is not one of its options, and ports and devices are never filled. The install plan lists every field the profile filled in `plan.profile`, with the value it replaced, and a warning says so, so a dry run shows exactly what changes. Masked fields show `(hidden)`. `"useProfile": false` installs with the template's own defaults. Installed containers never change when the profile does. The profile is not a place for secrets: it is returned in full by `GET /api/profile`.
+
+`GET /api/profile` returns the profile, a `suggested` profile built from the containers already installed, the counts behind it in `evidence`, and `notices`, such as containers whose timezone differs from Unraid's. A path is suggested only when two or more containers mount the same host folder at it. TZ is suggested from Unraid's own timezone setting, which Unraid gives every container it creates.
+
+`POST /api/profile` changes it. Fields left out stay as they are; inside `variables` and `paths` only the keys given change, `null` removes a key or clears a whole field, and an empty `appdataRoot` or `notes` clears it. Unknown fields are refused. `dryRun` returns the result without saving it. A saved profile is read back and reported with `verified`, and changes arriving at the same time are applied one after another so none is lost.
+
 ### Plugins
 
 The separate Plugins endpoints manage Unraid `.plg` plugins without CA. List and inspect require `plugins:read`; install requires `plugins:create`; check and update require `plugins:update`; removal requires `plugins:delete`. All four permissions default to off.
@@ -450,7 +476,7 @@ The transport uses stateless JSON responses without SSE or sessions. It supports
 | OPTIONS | `/mcp` | HTTP 204 when enabled and Origin is allowed; no key required |
 | Any | `/mcp` | HTTP 404 when disabled |
 
-The endpoint exposes the same 66 tools as the OpenClaw plugin, without OpenClaw's `server` argument. Read-only tools carry `readOnlyHint`; every other tool carries `destructiveHint`. Each call runs through the gateway's own `/api/` route in process, so the permission matrix, body validation, dry-run rules and blockers apply unchanged. OpenClaw keeps using `/api/*` whether MCP is on or off.
+The endpoint exposes the same 68 tools as the OpenClaw plugin, without OpenClaw's `server` argument. Read-only tools carry `readOnlyHint`; every other tool carries `destructiveHint`. Each call runs through the gateway's own `/api/` route in process, so the permission matrix, body validation, dry-run rules and blockers apply unchanged. OpenClaw keeps using `/api/*` whether MCP is on or off.
 
 ### Activity log
 
@@ -478,7 +504,7 @@ What this means for clients:
 
 ## OpenClaw plugin
 
-The [OpenClaw](https://github.com/openclaw/openclaw) plugin exposes all 66 tools to any AI agent that supports the OpenClaw protocol.
+The [OpenClaw](https://github.com/openclaw/openclaw) plugin exposes all 68 tools to any AI agent that supports the OpenClaw protocol.
 
 ### Install
 
@@ -584,6 +610,7 @@ The secret then lives in your environment (shell, systemd `EnvironmentFile`, or 
 | App APIs | `unraid_app_list`, `unraid_app_request` |
 | Compose Stacks | `unraid_compose_list`, `unraid_compose_get`, `unraid_compose_edit`, `unraid_compose_action` |
 | Background Jobs | `unraid_job_start`, `unraid_job_get`, `unraid_job_list` |
+| Setup Profile | `unraid_profile_get`, `unraid_profile_update` |
 | Plugins | `unraid_plugins_list`, `unraid_plugin_info`, `unraid_plugin_install`, `unraid_plugin_check_updates`, `unraid_plugin_update`, `unraid_plugin_remove` |
 | VMs | `unraid_vm_list`, `unraid_vm_inspect`, `unraid_vm_start`, `unraid_vm_stop`, `unraid_vm_pause`, `unraid_vm_resume`, `unraid_vm_force_stop`, `unraid_vm_reboot` |
 | Array | `unraid_array_status`, `unraid_array_start`, `unraid_array_stop`, `unraid_parity_status`, `unraid_parity_start`, `unraid_parity_pause`, `unraid_parity_resume`, `unraid_parity_cancel` |
@@ -607,6 +634,7 @@ Permissions use a `resource:action` format. Configure them from the WebGUI Permi
 | App APIs | `apps:read`, `apps:update` |
 | Compose Stacks | `compose:read`, `compose:update` |
 | Background Jobs | `jobs:read`, `jobs:create` |
+| Setup Profile | `profile:read`, `profile:update` |
 | Plugins | `plugins:read`, `plugins:create`, `plugins:update`, `plugins:delete` |
 | VMs | `vms:read`, `vms:update`, `vms:delete` |
 | Array & Storage | `array:read`, `array:update`, `disk:read`, `share:read`, `share:update` |
@@ -616,7 +644,7 @@ Permissions use a `resource:action` format. Configure them from the WebGUI Permi
 | Users | `me:read` |
 | Logs | `logs:read` |
 
-The WebGUI includes **Read Only**, **Docker Manager**, **VM Manager**, **Full Admin**, and **None** presets. Docker Manager includes all four `ca:` permissions. Read Only includes `plugins:read`, `template:read`, `apps:read`, `compose:read` and `jobs:read`. `template:update`, `apps:update` and `compose:update` must be enabled individually or through Full Admin. Plugin write permissions must be enabled individually or through Full Admin.
+The WebGUI includes **Read Only**, **Docker Manager**, **VM Manager**, **Full Admin**, and **None** presets. Docker Manager includes all four `ca:` permissions. Read Only includes `plugins:read`, `template:read`, `apps:read`, `compose:read`, `jobs:read` and `profile:read`. `template:update`, `apps:update`, `compose:update` and `profile:update` must be enabled individually or through Full Admin. Plugin write permissions must be enabled individually or through Full Admin.
 
 ## Architecture
 

@@ -370,6 +370,23 @@ $certificateReadable = $certificate['present'] && !isset($certificate['error']);
       </div>
     </div>
 
+    <!-- Setup Profile -->
+    <div class="occ-perm-category">
+      <div class="occ-perm-header" onclick="occToggleCategory(this)">
+        <span class="occ-expand-icon">&#9654;</span>
+        <h3>Setup Profile</h3>
+        <span class="occ-perm-summary" data-category="profile"></span>
+        <div class="occ-cat-toggle">
+          <button type="button" class="occ-btn occ-btn-xs" onclick="event.stopPropagation(); occSetCategory('profile', true)">All</button>
+          <button type="button" class="occ-btn occ-btn-xs" onclick="event.stopPropagation(); occSetCategory('profile', false)">None</button>
+        </div>
+      </div>
+      <div class="occ-perm-body" style="display:none;">
+        <label class="occ-perm-item"><input type="checkbox" name="profile:read" data-category="profile" <?=!empty($permissions['profile:read']) ? 'checked' : ''?>><span class="occ-perm-label">View</span><span class="occ-perm-desc">Read the saved setup profile and the conventions found in the containers already installed</span></label>
+        <label class="occ-perm-item"><input type="checkbox" name="profile:update" data-category="profile" <?=!empty($permissions['profile:update']) ? 'checked' : ''?>><span class="occ-perm-label">Edit</span><span class="occ-perm-desc">Change the values new app installs fill in by default</span></label>
+      </div>
+    </div>
+
     <!-- Plugins -->
     <div class="occ-perm-category">
       <div class="occ-perm-header" onclick="occToggleCategory(this)">

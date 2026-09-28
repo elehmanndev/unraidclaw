@@ -63,7 +63,7 @@ export function registerCaTools(api: any, getClient: ClientResolver): void {
   api.registerTool({
     name: "unraid_ca_install",
     description:
-      "Install a Community Applications app on the Unraid server using its template defaults. Writes an Unraid docker-manager template and has Unraid create and start the container, so it appears on the Docker tab like any other app. Required fields with no default must be supplied in overrides; call unraid_ca_app first to see them. Pass dryRun=true to get the resolved template and a preview of the docker command without changing anything. Refuses apps whose templates need unsupported or unsafe options rather than installing something different from the template. If it refuses because the template needs privileged mode, Extra Parameters, Post Arguments, host devices or a custom network such as br0, pass full=true to install it with every setting the template asks for, the way the Docker tab would; that also needs the Edit & Rebuild permission. A full install can take settings such as {\"Network\": \"br0\", \"MyIP\": \"192.168.1.60\"}. Tailscale templates and templates with extra networks are still refused. Always dry-run a full install first and tell the user what the container will be allowed to do.",
+      "Install a Community Applications app on the Unraid server using its template defaults. Writes an Unraid docker-manager template and has Unraid create and start the container, so it appears on the Docker tab like any other app. Required fields with no default must be supplied in overrides; call unraid_ca_app first to see them. Pass dryRun=true to get the resolved template and a preview of the docker command without changing anything. Refuses apps whose templates need unsupported or unsafe options rather than installing something different from the template. If it refuses because the template needs privileged mode, Extra Parameters, Post Arguments, host devices or a custom network such as br0, pass full=true to install it with every setting the template asks for, the way the Docker tab would; that also needs the Edit & Rebuild permission. A full install can take settings such as {\"Network\": \"br0\", \"MyIP\": \"192.168.1.60\"}. Tailscale templates and templates with extra networks are still refused. Always dry-run a full install first and tell the user what the container will be allowed to do. Fields you leave unset are filled from the owner's setup profile (see unraid_profile_get), such as TZ, PUID and media folders; plan.profile lists each one, and useProfile=false keeps the template's defaults instead.",
     parameters: {
       type: "object",
       properties: {
@@ -93,6 +93,10 @@ export function registerCaTools(api: any, getClient: ClientResolver): void {
           additionalProperties: { type: "string" },
           description: "Full installs only: template settings to set, the same keys unraid_template_edit takes, e.g. {\"Network\": \"br0\", \"MyIP\": \"192.168.1.60\"}.",
         },
+        useProfile: {
+          type: "boolean",
+          description: "Fill fields you leave unset from the owner's setup profile (default: true).",
+        },
         server: { type: "string", description: "Target server name (optional, uses default server)" },
       },
       required: ["name"],
@@ -100,9 +104,11 @@ export function registerCaTools(api: any, getClient: ClientResolver): void {
     },
     execute: async (_id: string, params: Record<string, unknown>) => {
       try {
-        checkParams(params, ["name", "repo", "containerName", "overrides", "dryRun", "full", "settings", "server"]);
-        if (params.full !== undefined && typeof params.full !== "boolean") {
-          throw new Error(`"full" must be true or false, not ${JSON.stringify(params.full)}. Nothing was sent to the server.`);
+        checkParams(params, ["name", "repo", "containerName", "overrides", "dryRun", "full", "settings", "useProfile", "server"]);
+        for (const key of ["full", "useProfile"]) {
+          if (params[key] !== undefined && typeof params[key] !== "boolean") {
+            throw new Error(`"${key}" must be true or false, not ${JSON.stringify(params[key])}. Nothing was sent to the server.`);
+          }
         }
         const body: Record<string, unknown> = {};
         if (params.repo) body.repo = params.repo;
@@ -111,6 +117,7 @@ export function registerCaTools(api: any, getClient: ClientResolver): void {
         if (params.dryRun !== undefined) body.dryRun = params.dryRun;
         if (params.full !== undefined) body.full = params.full;
         if (params.settings !== undefined) body.settings = params.settings;
+        if (params.useProfile !== undefined) body.useProfile = params.useProfile;
         return textResult(
           await getClient(params.server as string | undefined).post(
             `/api/ca/app/${encodeURIComponent(String(params.name))}/install`,

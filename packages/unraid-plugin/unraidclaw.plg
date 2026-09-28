@@ -14,6 +14,8 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://github.com/elehmanndev/unraidclaw" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
 
 <CHANGES>
+### 0.2.8
+- Add a setup profile: the owner's usual install settings, such as TZ, PUID, PGID and UMASK, host folders for container paths such as /media, an appdata folder and free-form notes. Every Community Applications install fills the fields the request leaves unset from it, lists each one in the plan, and takes "useProfile": false to use the template's defaults instead. GET /api/profile also suggests a profile from the installed containers and points out ones on an old timezone; POST /api/profile changes it. New permissions profile:read and profile:update, both off by default, and two new tools
 ### 0.2.7
 - Add "pull" to container edits: the newest image for the template's tag is pulled first and the container is rebuilt on it with Unraid's own command, the same swap and rollback as any edit. With no other change this updates any container, including privileged ones and ones with Extra Parameters or devices, which app updates refuse, and does nothing when the image is already the newest. An update that changes no setting leaves the template file untouched. App update refusals now point to it
 ### 0.2.6

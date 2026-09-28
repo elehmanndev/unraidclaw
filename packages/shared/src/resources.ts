@@ -5,6 +5,7 @@ export enum Resource {
   APPS = "apps",
   COMPOSE = "compose",
   JOBS = "jobs",
+  PROFILE = "profile",
   PLUGINS = "plugins",
   VMS = "vms",
   ARRAY = "array",
@@ -92,6 +93,14 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     permissions: [
       { key: "jobs:read", label: "View", description: "List background jobs and read their results" },
       { key: "jobs:create", label: "Start", description: "Run an app install or update, a container edit, a compose change or a plugin install or update in the background; the operation's own permission still applies" },
+    ],
+  },
+  {
+    name: "Setup Profile",
+    description: "Your usual install settings, such as timezone, user and group IDs and media folders, which every new app install fills in",
+    permissions: [
+      { key: "profile:read", label: "View", description: "Read the saved setup profile and the conventions found in the containers already installed" },
+      { key: "profile:update", label: "Edit", description: "Change the values new app installs fill in by default" },
     ],
   },
   {

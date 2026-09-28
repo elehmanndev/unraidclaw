@@ -346,7 +346,7 @@ export function missingRequired(config: CaConfigEntry[], overrides: Map<string, 
   return out;
 }
 
-function overrideKey(entry: CaConfigEntry): string {
+export function overrideKey(entry: CaConfigEntry): string {
   // Devices have no container-side target, so a template with two of them
   // would give both the same key and one override would set them all. The
   // name tells them apart; entries with a target keep the key they had.

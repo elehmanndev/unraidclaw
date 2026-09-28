@@ -482,6 +482,72 @@ test("all required paths must be supplied, not just the first", async () => {
   assert.deepEqual(error.details.missingRequired, ["Path: /data/movies"]);
 });
 
+// ── Setup profile ───────────────────────────────────────────────
+
+const PROFILE = {
+  variables: { TZ: "Europe/Madrid", PUID: "99" },
+  paths: { "/models": "/mnt/user/Models", "/data/tvshows": "/mnt/user/Media/TV", "/data/movies": "/mnt/user/Media/Movies" },
+  appdataRoot: "/mnt/cache/appdata",
+};
+
+test("an install fills the fields the caller leaves unset from the setup profile", async () => {
+  await setPermissions(ALL_CA);
+  const { app } = await harness({ readProfile: async () => PROFILE });
+  const res = await app.inject({ method: "POST", url: "/api/ca/app/MeshVault/install", payload: { dryRun: true } });
+  assert.equal(res.statusCode, 200, res.body);
+  const { plan, warnings } = res.json().data;
+  assert.ok(plan.env.includes("TZ=Europe/Madrid"), JSON.stringify(plan.env));
+  assert.ok(!plan.env.includes("TZ=Etc/UTC"));
+  assert.ok(plan.volumes.includes("/mnt/user/Models:/models:ro"), JSON.stringify(plan.volumes));
+  assert.ok(plan.volumes.includes("/mnt/cache/appdata/meshvault:/data:rw"), JSON.stringify(plan.volumes));
+  assert.deepEqual(plan.profile.map((a: { from: string }) => a.from).sort(), ["appdataRoot", "paths./models", "variables.TZ"]);
+  assert.ok(plan.templateXml.includes(">Europe/Madrid</Config>"), "the template on flash gets the profile's value");
+  assert.match(warnings[0], /Filled from the setup profile: .*Timezone = Europe\/Madrid/);
+});
+
+test("a profile path can supply a required field", async () => {
+  await setPermissions(ALL_CA);
+  const { app } = await harness({ readProfile: async () => PROFILE });
+  const res = await app.inject({ method: "POST", url: "/api/ca/app/Jellyfin/install", payload: { dryRun: true } });
+  assert.equal(res.statusCode, 200, res.body);
+  const { plan } = res.json().data;
+  assert.ok(plan.volumes.includes("/mnt/user/Media/TV:/data/tvshows:rw"), JSON.stringify(plan.volumes));
+  assert.ok(plan.volumes.includes("/mnt/user/Media/Movies:/data/movies:rw"));
+  assert.ok(plan.volumes.includes("/mnt/cache/appdata/jellyfin:/config:rw"));
+  assert.equal(plan.profile.some((a: { field: string }) => a.field.includes("PUID")), false, "PUID already matches the template");
+});
+
+test("the caller's overrides beat the profile, and useProfile=false turns it off", async () => {
+  await setPermissions(ALL_CA);
+  const { app } = await harness({ readProfile: async () => PROFILE });
+  const overridden = await app.inject({ method: "POST", url: "/api/ca/app/MeshVault/install", payload: { dryRun: true, overrides: { TZ: "America/New_York" } } });
+  assert.equal(overridden.statusCode, 200, overridden.body);
+  assert.ok(overridden.json().data.plan.env.includes("TZ=America/New_York"));
+  assert.equal(overridden.json().data.plan.profile.some((a: { from: string }) => a.from === "variables.TZ"), false);
+
+  const off = await app.inject({ method: "POST", url: "/api/ca/app/MeshVault/install", payload: { dryRun: true, useProfile: false } });
+  assert.equal(off.statusCode, 200, off.body);
+  assert.ok(off.json().data.plan.env.includes("TZ=Etc/UTC"));
+  assert.equal(off.json().data.plan.profile, undefined);
+  assert.ok(!off.json().data.warnings.some((w: string) => w.includes("setup profile")));
+
+  const bad = await app.inject({ method: "POST", url: "/api/ca/app/MeshVault/install", payload: { dryRun: true, useProfile: "no" } });
+  assert.equal(bad.statusCode, 400);
+  assert.equal(bad.json().error.code, "CA_INVALID_BODY");
+});
+
+test("a real install writes the profile's values and creates the profile's folders", async () => {
+  await setPermissions(ALL_CA);
+  const { app, templatesDir, hostDirs } = await harness({ readProfile: async () => PROFILE });
+  const res = await app.inject({ method: "POST", url: "/api/ca/app/MeshVault/install", payload: {} });
+  assert.equal(res.statusCode, 200, res.body);
+  const xml = await readFile(join(templatesDir, "my-MeshVault.xml"), "utf8");
+  assert.ok(xml.includes('Target="TZ" Default="Europe/Madrid"'), xml);
+  assert.ok(xml.includes(">/mnt/cache/appdata/meshvault</Config>"));
+  assert.ok(hostDirs.includes("/mnt/cache/appdata/meshvault"), JSON.stringify(hostDirs));
+  assert.ok(hostDirs.includes("/mnt/user/Models"));
+});
+
 test("hostile template text is XML-escaped exactly once", async () => {
   await setPermissions(ALL_CA);
   const hostile = JSON.parse(FIXTURE);
@@ -987,7 +1053,7 @@ test("an unknown body field is refused, so no flag can be smuggled past a blocke
   const { error } = res.json();
   assert.equal(error.code, "CA_INVALID_BODY");
   assert.ok(error.message.includes("force"), error.message);
-  assert.deepEqual(error.details.allowed, ["repo", "name", "overrides", "dryRun", "full", "settings"]);
+  assert.deepEqual(error.details.allowed, ["repo", "name", "overrides", "dryRun", "full", "settings", "useProfile"]);
   assert.deepEqual(runs, []);
   assert.deepEqual(await readdir(templatesDir), []);
 });
