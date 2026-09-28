@@ -14,6 +14,8 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://forums.unraid.net/topic/197498-plugin-support-unraidclaw-ai-agent-gateway-with-permission-control/" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
 
 <CHANGES>
+### Unreleased
+- Fix the CLI refusing a flag value that starts with a dash, such as `docker create --extra-args "--gpus all"`, as an unknown flag. A string flag now takes a following dash word as its value, and the `--flag=value` form keeps working
 ### 0.1.36
 - POST /api/docker/containers and the unraid_docker_create tool accept the advanced settings of Unraid's container form: extraArgs (Extra Parameters, such as --gpus all or --memory=8g), postArgs (Post Arguments), staticIp (a fixed IPv4 or IPv6 address on a macvlan, ipvlan or custom bridge network), privileged, cpuset and devices. Each is saved to the matching field of the container's template, so the Docker tab shows it and rebuilds the container the same way. The two free-form fields accept only letters, digits, : . , / + = _ - and single spaces, since Unraid hands them to the shell unescaped when it rebuilds a container, and every value is checked before docker runs. Thanks to @totalanni for the extraArgs and staticIp implementation this builds on
 ### 0.1.34
