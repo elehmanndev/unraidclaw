@@ -49,7 +49,7 @@ Name only what should change: settings and entries the request leaves out are ke
 
 Always run it with `dryRun: true` first. Show the user the changes and the command, and ask before running it for real. If the rebuilt container does not start or stops within a few seconds, the original comes back unchanged and the error carries the new container's last log lines. Read them, explain what went wrong, and propose a corrected edit.
 
-This tool changes settings, not the app version. An unchanged image is not pulled, so use `unraid_ca_update` to update an app. Changing `Repository` to another tag pulls that tag.
+This tool changes settings, not the app version, unless you pass `pull: true`: then it pulls the newest image for the tag and rebuilds on it. Use `unraid_ca_update` to update an app first; when it refuses because the container is privileged or has Extra Parameters or devices, update it with `unraid_template_edit` and `pull: true` and nothing else. Changing `Repository` to another tag pulls that tag.
 
 ## Installing apps that need more access
 

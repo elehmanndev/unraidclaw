@@ -84,6 +84,8 @@ interface Box {
   mounts: Mount[];
   network: string;
   privileged: boolean;
+  /** The image id it was created from. */
+  imageId?: string;
 }
 
 interface BuiltSpec {
@@ -95,7 +97,10 @@ interface BuiltSpec {
 }
 
 class FakeHost {
-  images = new Set<string>();
+  /** Image ids by normalized tag. */
+  images = new Map<string, string>();
+  /** The id a tag gets on its next pull, to stand in for a newer upstream image. */
+  pullTo = new Map<string, string>();
   containers: Box[] = [];
   runs: string[][] = [];
   networks = new Set(["bridge", "host", "none", "br0"]);
@@ -136,7 +141,7 @@ class FakeHost {
     return JSON.stringify({
       Id: c.id,
       Name: `/${c.name}`,
-      Image: `sha256:img-${normalizeImage(c.image)}`,
+      Image: c.imageId ?? `sha256:img-${normalizeImage(c.image)}`,
       State: {
         Status: c.status ?? (c.running ? "running" : "exited"),
         Running: c.running,
@@ -212,6 +217,7 @@ class FakeHost {
         mounts: spec.mounts,
         network: spec.network,
         privileged: spec.privileged,
+        imageId: this.images.get(normalizeImage(spec.image)),
       };
       this.containers.push(box);
       return { stdout: `${box.id}\n`, stderr: "" };
@@ -227,10 +233,11 @@ class FakeHost {
     if (cmd === "image" && args[1] === "inspect") {
       const ref = normalizeImage(args[args.length - 1]);
       if (!this.images.has(ref)) throw new Error(`Error: No such image: ${ref}`);
-      return { stdout: `${JSON.stringify({ Id: `sha256:img-${ref}`, Config: {} })}\n`, stderr: "" };
+      return { stdout: `${JSON.stringify({ Id: this.images.get(ref), Config: {} })}\n`, stderr: "" };
     }
     if (cmd === "pull") {
-      this.images.add(normalizeImage(args[1]));
+      const ref = normalizeImage(args[1]);
+      this.images.set(ref, this.pullTo.get(ref) ?? this.images.get(ref) ?? `sha256:img-${ref}`);
       return { stdout: "", stderr: "" };
     }
     if (cmd === "logs") {
@@ -269,7 +276,7 @@ class FakeHost {
 /** A host with a running jellyfin, installed from the default template. */
 function runningJellyfin(extra: Partial<Box> = {}): FakeHost {
   const host = new FakeHost();
-  host.images.add(normalizeImage("jellyfin/jellyfin:latest"));
+  host.images.set(normalizeImage("jellyfin/jellyfin:latest"), `sha256:img-${normalizeImage("jellyfin/jellyfin:latest")}`);
   host.containers.push({
     id: "a".repeat(64),
     name: "jellyfin",
@@ -791,4 +798,66 @@ test("the edit's staged copy of the template is always cleaned up", async () => 
   assert.equal(staged.length, 2);
   assert.deepEqual(discarded, staged);
   assert.deepEqual(await readdir(h.backupDir).catch(() => []), ["my-jellyfin.2026-09-25T12-00-00-000Z.xml"]);
+});
+
+// ── Updating with pull ──────────────────────────────────────────
+
+test("pull alone is a valid edit, and must be true or false", () => {
+  assert.doesNotThrow(() => parseTemplateEditBody({ pull: true }));
+  assert.throws(() => parseTemplateEditBody({ pull: "yes" }), /true or false/);
+  assert.throws(() => parseTemplateEditBody({ pull: false }), /Nothing to change/);
+});
+
+test("an update with no newer image rebuilds nothing", async () => {
+  await setPermissions(EDIT);
+  const h = await harness(runningJellyfin());
+  const res = await edit(h, { pull: true });
+  assert.equal(res.statusCode, 200, res.body);
+  const d = res.json().data;
+  assert.deepEqual([d.pulled, d.rebuilt], [true, false]);
+  assert.equal(d.previousImageId, d.imageId);
+  assert.ok(h.host.runs.some((r) => r[1] === "pull"));
+  assert.equal(h.host.mutations().some((r) => r[0] === "/bin/bash" || r[1] === "stop"), false, "no container was touched");
+});
+
+test("an update with a newer image rebuilds on it, however privileged the container is", async () => {
+  await setPermissions(EDIT);
+  const xml = templateXml({ extra: "\n  <Privileged>true</Privileged>" }).replace("<Privileged>false</Privileged>\n", "").replace("<ExtraParams/>", "<ExtraParams>--device=/dev/dri --cap-add=NET_ADMIN</ExtraParams>");
+  const host = runningJellyfin({ privileged: true });
+  host.pullTo.set(normalizeImage("jellyfin/jellyfin:latest"), "sha256:newer");
+  const h = await harness(host, xml);
+  const res = await edit(h, { pull: true });
+  assert.equal(res.statusCode, 200, res.body);
+  const d = res.json().data;
+  assert.deepEqual([d.pulled, d.rebuilt, d.imageId], [true, true, "sha256:newer"]);
+  assert.notEqual(d.previousImageId, "sha256:newer");
+  const now = host.containers;
+  assert.equal(now.length, 1);
+  assert.deepEqual([now[0].imageId, now[0].privileged, now[0].running], ["sha256:newer", true, true]);
+  assert.match(d.plan.dockerCommand, /--device=\/dev\/dri --cap-add=NET_ADMIN/);
+  assert.equal(await savedTemplate(h), xml, "an update leaves the template as it was");
+});
+
+test("an update dry run pulls nothing and says what would happen", async () => {
+  await setPermissions(EDIT);
+  const host = runningJellyfin();
+  host.pullTo.set(normalizeImage("jellyfin/jellyfin:latest"), "sha256:newer");
+  const h = await harness(host);
+  const res = await edit(h, { pull: true, dryRun: true });
+  assert.equal(res.statusCode, 200, res.body);
+  assert.match(res.json().data.warnings.join(" "), /will be pulled first/);
+  assert.equal(host.runs.some((r) => r[1] === "pull"), false);
+  assert.deepEqual(host.mutations(), []);
+});
+
+test("an update that will not start on the new image goes back to the old one", async () => {
+  await setPermissions(EDIT);
+  const host = runningJellyfin();
+  host.pullTo.set(normalizeImage("jellyfin/jellyfin:latest"), "sha256:newer");
+  host.crashOnStart = true;
+  const h = await harness(host);
+  const res = await edit(h, { pull: true });
+  assert.equal(res.statusCode, 500);
+  assert.equal(res.json().error.code, "TEMPLATE_START_FAILED");
+  assert.deepEqual(host.containers.map((c) => [c.id, c.running]), [["a".repeat(64), true]], "the original is back, running");
 });

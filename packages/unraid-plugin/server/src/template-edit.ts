@@ -51,7 +51,7 @@ const DISPLAY_VALUES = new Set(["always", "always-hide", "advanced", "advanced-h
 
 const EDIT_FIELDS = ["type", "target", "value", "name", "mode", "default", "description", "display", "required", "mask", "replaces"];
 const REF_FIELDS = ["type", "target", "mode", "value"];
-const BODY_FIELDS = ["settings", "config", "removeConfig", "dryRun"];
+const BODY_FIELDS = ["settings", "config", "removeConfig", "pull", "dryRun"];
 
 /** Attributes of a new `<Config>`, in the order the Docker tab writes them. */
 const CONFIG_ATTRS = ["Name", "Target", "Default", "Mode", "Description", "Type", "Display", "Required", "Mask"];
@@ -181,6 +181,7 @@ export function parseTemplateEditBody(raw: unknown): TemplateEditRequest {
   const out: TemplateEditRequest = {};
 
   if (body.dryRun !== undefined) out.dryRun = checkBoolean(body.dryRun, '"dryRun"');
+  if (body.pull !== undefined) out.pull = checkBoolean(body.pull, '"pull"');
 
   if (body.settings !== undefined) out.settings = parseTemplateSettings(body.settings);
 
@@ -231,7 +232,7 @@ export function parseTemplateEditBody(raw: unknown): TemplateEditRequest {
   }
 
   const count = Object.keys(out.settings ?? {}).length + (out.config?.length ?? 0) + (out.removeConfig?.length ?? 0);
-  if (count === 0) invalid('Nothing to change. Pass at least one of "settings", "config" or "removeConfig".');
+  if (count === 0 && out.pull !== true) invalid('Nothing to change. Pass at least one of "settings", "config" or "removeConfig", or "pull": true to update the image.');
   return out;
 }
 

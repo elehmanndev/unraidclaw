@@ -14,6 +14,8 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://github.com/elehmanndev/unraidclaw" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
 
 <CHANGES>
+### 0.2.7
+- Add "pull" to container edits: the newest image for the template's tag is pulled first and the container is rebuilt on it with Unraid's own command, the same swap and rollback as any edit. With no other change this updates any container, including privileged ones and ones with Extra Parameters or devices, which app updates refuse, and does nothing when the image is already the newest. An update that changes no setting leaves the template file untouched. App update refusals now point to it
 ### 0.2.6
 - Add background jobs: POST /api/jobs runs an app install or update, a container edit, a compose action or edit, or a plugin install or update without holding the request open, through the same tool and route as a direct call and with the caller's permissions. GET /api/jobs and /api/jobs/:id read jobs back, and an Unraid notification says when one finishes. New permissions jobs:read and jobs:create, both off by default, and three new tools
 ### 0.2.5

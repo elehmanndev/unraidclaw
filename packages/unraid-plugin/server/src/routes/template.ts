@@ -266,7 +266,8 @@ export function registerTemplateRoutes(app: FastifyInstance, lifecycle: CaLifecy
           extraNetworks: [],
           hostPathsToCreate: [],
         };
-        if (edited.changes.length === 0) {
+        const pull = body.pull === true;
+        if (edited.changes.length === 0 && !pull) {
           const response: TemplateEditResponse = {
             ...base,
             dryRun: body.dryRun === true,
@@ -282,24 +283,55 @@ export function registerTemplateRoutes(app: FastifyInstance, lifecycle: CaLifecy
         const warnings: string[] = [];
 
         // A new image must be on the server before Unraid builds the command,
-        // because the Tailscale hook reads its entrypoint. An edit that keeps
-        // the image never pulls: changing settings is not an update, and an
-        // update is its own action.
+        // because the Tailscale hook reads its entrypoint. Otherwise an edit
+        // only pulls when asked to: changing settings is not an update. With
+        // "pull", it is one, for any container, whatever its template holds.
         const imagePresent = (await lifecycle.inspectJson("image", image)) !== null;
-        if (!imagePresent) {
+        let pulledImageId: string | undefined;
+        if (!imagePresent || pull) {
           if (body.dryRun) {
-            warnings.push(`${image} is not on the server yet. It will be pulled before the container is rebuilt.`);
+            warnings.push(
+              imagePresent
+                ? `${image} will be pulled first. If it is newer than the image "${containerName}" runs, the container is rebuilt with it${edited.changes.length === 0 ? "; if not, nothing changes" : ""}.`
+                : `${image} is not on the server yet. It will be pulled before the container is rebuilt.`
+            );
           } else {
             try {
               await ca.run("docker", ["pull", image], PULL_TIMEOUT_MS);
             } catch (err) {
               return sendError(reply, 502, "TEMPLATE_PULL_FAILED", `Could not pull ${image}: ${safe(err)}. Nothing was changed.`);
             }
+            try {
+              pulledImageId = String(JSON.parse((await lifecycle.inspectJson("image", image)) ?? "null")?.Id ?? "") || undefined;
+            } catch (err) {
+              return asError(reply, err);
+            }
+            if (!pulledImageId) {
+              return sendError(reply, 500, "TEMPLATE_IMAGE_UNREADABLE", `docker pull reported success but ${image} cannot be inspected. Nothing was changed.`);
+            }
+            // An update with nothing newer to run is done: rebuilding would
+            // only restart the app for nothing.
+            if (edited.changes.length === 0 && pulledImageId === facts.imageId) {
+              const response: TemplateEditResponse = {
+                ...base,
+                dryRun: false,
+                rebuilt: false,
+                running: facts.running,
+                pulled: true,
+                previousImageId: facts.imageId,
+                imageId: pulledImageId,
+                plan: emptyPlan,
+                warnings: [`${image} is already the image "${containerName}" runs, so nothing was rebuilt.`],
+              };
+              return reply.send({ ok: true, data: response });
+            }
           }
         }
 
         try {
-          stagedPath = await runtime.stageTemplate(edited.xml);
+          // An update that changes no setting builds from the template exactly
+          // as it is on flash, and leaves that file alone.
+          stagedPath = await runtime.stageTemplate(edited.changes.length === 0 ? tpl.xml : edited.xml);
         } catch (err) {
           return sendError(reply, 500, "TEMPLATE_STAGE_FAILED", `Could not stage the edited template: ${safe(err)}. Nothing was changed.`);
         }
@@ -382,7 +414,7 @@ export function registerTemplateRoutes(app: FastifyInstance, lifecycle: CaLifecy
         };
 
         if (body.dryRun) {
-          const response: TemplateEditResponse = { ...base, dryRun: true, rebuilt: false, running: facts.running, plan, warnings };
+          const response: TemplateEditResponse = { ...base, dryRun: true, rebuilt: false, running: facts.running, previousImageId: facts.imageId, plan, warnings };
           return reply.send({ ok: true, data: response });
         }
 
@@ -413,11 +445,13 @@ export function registerTemplateRoutes(app: FastifyInstance, lifecycle: CaLifecy
           }
         }
 
-        let backupPath: string;
-        try {
-          backupPath = await runtime.backupTemplate(tpl.path, runtime.now());
-        } catch (err) {
-          return sendError(reply, 500, "TEMPLATE_BACKUP_FAILED", `Could not back up ${tpl.path}: ${safe(err)}. Nothing was changed.`);
+        let backupPath: string | undefined;
+        if (edited.changes.length > 0) {
+          try {
+            backupPath = await runtime.backupTemplate(tpl.path, runtime.now());
+          } catch (err) {
+            return sendError(reply, 500, "TEMPLATE_BACKUP_FAILED", `Could not back up ${tpl.path}: ${safe(err)}. Nothing was changed.`);
+          }
         }
 
         // Build the replacement before the running app is touched. The command
@@ -563,7 +597,12 @@ export function registerTemplateRoutes(app: FastifyInstance, lifecycle: CaLifecy
             await logsOf()
           );
         }
-        if (finalFacts.name !== containerName || normalizeImage(finalFacts.image) !== normalizeImage(image) || finalFacts.running !== wasRunning) {
+        if (
+          finalFacts.name !== containerName ||
+          normalizeImage(finalFacts.image) !== normalizeImage(image) ||
+          finalFacts.running !== wasRunning ||
+          (pulledImageId !== undefined && finalFacts.imageId !== pulledImageId)
+        ) {
           return await failed(
             "TEMPLATE_EDIT_FAILED",
             `The rebuilt container is not what was asked for (name "${finalFacts.name}", image ${finalFacts.image || "unknown"}, ${finalFacts.running ? "running" : "stopped"}).`,
@@ -573,10 +612,12 @@ export function registerTemplateRoutes(app: FastifyInstance, lifecycle: CaLifecy
 
         // Only a rebuilt container that checks out gets its template saved, so
         // the template on flash always describes the container that is there.
-        try {
-          await runtime.writeTemplate(tpl.path, edited.xml);
-        } catch (err) {
-          return await failed("TEMPLATE_WRITE_FAILED", `The rebuilt container worked, but its template could not be saved: ${safe(err)}.`, true);
+        if (edited.changes.length > 0) {
+          try {
+            await runtime.writeTemplate(tpl.path, edited.xml);
+          } catch (err) {
+            return await failed("TEMPLATE_WRITE_FAILED", `The rebuilt container worked, but its template could not be saved: ${safe(err)}.`, true);
+          }
         }
 
         try {
@@ -589,9 +630,12 @@ export function registerTemplateRoutes(app: FastifyInstance, lifecycle: CaLifecy
           ...base,
           dryRun: false,
           containerId: finalFacts.id,
-          backupPath,
+          ...(backupPath ? { backupPath } : {}),
           rebuilt: true,
           running: finalFacts.running,
+          ...(pulledImageId !== undefined ? { pulled: true } : {}),
+          previousImageId: facts.imageId,
+          imageId: finalFacts.imageId,
           plan,
           warnings,
         };
