@@ -936,7 +936,7 @@ export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = crea
             reply,
             422,
             "CA_NOT_UPDATABLE",
-            `"${containerName}" cannot be updated through UnraidClaw: ${blockers.map((b) => b.message).join(" ")}`,
+            `"${containerName}" cannot be updated through UnraidClaw: ${blockers.map((b) => b.message).join(" ")} To update it the way the Docker tab does, edit it with "pull": true (unraid_template_edit), which rebuilds it from its template with Unraid's own command.`,
             { blockers }
           );
         }

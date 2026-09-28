@@ -64,7 +64,7 @@ export function registerTemplateTools(api: any, getClient: ClientResolver): void
   api.registerTool({
     name: "unraid_template_edit",
     description:
-      "Change an installed container's settings and rebuild it, the way editing it on the Docker tab and clicking Apply does. Anything the Docker tab supports works: ports, paths, variables, labels, devices, network and fixed IP, extra networks, privileged mode, Extra Parameters, Post Arguments, CPU pinning, memory limit and Tailscale. Unraid's own docker manager builds the command from the edited template. The new container is created before the running one is touched; if it fails to start, or stops within a few seconds, the original container comes back as it was, its template is left unchanged, and the new container's last log lines are returned. The template is only saved once the rebuilt container checks out, and a copy of the old one is kept. Docker volumes the container already has are carried over. Settings the request does not name are kept. Config entries are matched by type and target, plus protocol for a port and device path for a device; an entry that does not exist yet is added. This changes settings, not the app version: an unchanged image is not pulled, so use unraid_ca_update to update an app. Always call it with dryRun=true first and show the user the changes and the command before running it for real.",
+      "Change an installed container's settings and rebuild it, the way editing it on the Docker tab and clicking Apply does. Anything the Docker tab supports works: ports, paths, variables, labels, devices, network and fixed IP, extra networks, privileged mode, Extra Parameters, Post Arguments, CPU pinning, memory limit and Tailscale. Unraid's own docker manager builds the command from the edited template. The new container is created before the running one is touched; if it fails to start, or stops within a few seconds, the original container comes back as it was, its template is left unchanged, and the new container's last log lines are returned. The template is only saved once the rebuilt container checks out, and a copy of the old one is kept. Docker volumes the container already has are carried over. Settings the request does not name are kept. Config entries are matched by type and target, plus protocol for a port and device path for a device; an entry that does not exist yet is added. It changes settings, not the app version, unless pull=true: then the newest image for the template's tag is pulled first and the container is rebuilt on it, which updates any container, privileged ones included, and does nothing when the image is already the newest. Use pull=true, with no other changes, to update an app that unraid_ca_update refuses. Always call it with dryRun=true first and show the user the changes and the command before running it for real.",
     parameters: {
       type: "object",
       properties: {
@@ -93,6 +93,7 @@ export function registerTemplateTools(api: any, getClient: ClientResolver): void
         },
         config: { type: "array", description: "Ports, paths, variables, labels or devices to add or change.", items: CONFIG_EDIT },
         removeConfig: { type: "array", description: "Ports, paths, variables, labels or devices to remove.", items: CONFIG_REF },
+        pull: { type: "boolean", description: "Pull the newest image for the tag first and rebuild on it: an update. With nothing else to change and no newer image, nothing happens (default: false)." },
         dryRun: {
           type: "boolean",
           description: "Report the changes, the exact command and what would be created, without touching anything (default: false)",
@@ -104,9 +105,9 @@ export function registerTemplateTools(api: any, getClient: ClientResolver): void
     },
     execute: async (_id: string, params: Record<string, unknown>) => {
       try {
-        checkParams(params, ["name", "settings", "config", "removeConfig", "dryRun", "server"]);
+        checkParams(params, ["name", "settings", "config", "removeConfig", "pull", "dryRun", "server"]);
         const body: Record<string, unknown> = {};
-        for (const key of ["settings", "config", "removeConfig", "dryRun"]) {
+        for (const key of ["settings", "config", "removeConfig", "pull", "dryRun"]) {
           if (params[key] !== undefined) body[key] = params[key];
         }
         return textResult(

@@ -303,6 +303,8 @@ A dry run returns the changes, the command with masked values redacted, the netw
 
 A real edit pulls the image only when it is not on the server yet, so changing settings never updates an app. It creates missing host paths as `nobody:users` and backs up the template to `/boot/config/plugins/unraidclaw/template-backups/`. It then builds the replacement under a temporary name before touching the running container. The swap and rollback work as they do for app updates. A running app must still be running a few seconds after starting. If it is not, the original returns and the new container's last log lines are included in the error. The template is saved only after the rebuilt container passes those checks. Docker volumes the container has that the new command does not mount are carried over. Bind mounts the edit drops are reported. A restarting container can be edited; paused or dying ones are refused.
 
+`"pull": true` pulls the newest image for the template's tag first and rebuilds on it, with the same swap and rollback. With no other change it is an update for any container, including the privileged ones `POST /api/ca/app/:name/update` refuses, and it does nothing when the image is already the newest. The template is left exactly as it is, with no backup or rewrite, when the edit changes no setting. A dry run pulls nothing.
+
 ### App APIs
 
 `POST /api/apps/:name/request` sends one HTTP request to the web API of an installed container, for changes made inside an app rather than to its container, such as an album in Immich or a proxy host in Nginx Proxy Manager.

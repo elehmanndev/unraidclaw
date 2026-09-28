@@ -363,6 +363,13 @@ export interface TemplateEditRequest {
   settings?: Partial<Record<TemplateSettingKey, string>>;
   config?: TemplateConfigEdit[];
   removeConfig?: TemplateConfigRef[];
+  /**
+   * Pull the newest image for the template's tag first, and rebuild with it.
+   * With nothing else to change this is an update, for any container,
+   * privileged ones included; when the image is already the newest, nothing
+   * is rebuilt.
+   */
+  pull?: boolean;
   dryRun?: boolean;
 }
 
@@ -406,6 +413,11 @@ export interface TemplateEditResponse {
   running: boolean;
   /** Whether it was running before, which the rebuild restores. */
   wasRunning: boolean;
+  /** True when the image was pulled. */
+  pulled?: boolean;
+  /** The image id the container ran before, and the one it runs now. */
+  previousImageId?: string;
+  imageId?: string;
   plan: TemplateEditPlan;
   warnings: string[];
 }
