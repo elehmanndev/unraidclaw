@@ -153,6 +153,8 @@ export interface CaInstallRequest {
   full?: boolean;
   /** Template settings to set on a full install, such as a network and a fixed IP. */
   settings?: Partial<Record<TemplateSettingKey, string>>;
+  /** Fill fields the caller leaves unset from the saved setup profile (default true). */
+  useProfile?: boolean;
 }
 
 export interface CaInstallPlan {
@@ -181,6 +183,8 @@ export interface CaInstallPlan {
    * out; `templateXml` has them, and Unraid builds the command from it.
    */
   settings?: Partial<Record<TemplateSettingKey, string>>;
+  /** Fields filled from the setup profile. Absent when nothing was. */
+  profile?: ProfileApplied[];
 }
 
 export interface CaInstallResponse {
@@ -598,6 +602,84 @@ export interface JobStartRequest {
   arguments?: Record<string, unknown>;
   /** Send an Unraid notification when the job finishes (default true). Needs notification:create. */
   notify?: boolean;
+}
+
+// ── Setup profile ───────────────────────────────────────
+
+/**
+ * The owner's usual install settings. A new app install fills a template
+ * field from here when the caller did not set it: a variable by its name, a
+ * path by its container-side target, and an appdata folder by moving it
+ * under appdataRoot. Values the caller passes always win.
+ */
+export interface SetupProfile {
+  /** Values for template variables by name, such as TZ, PUID, PGID or UMASK. */
+  variables?: Record<string, string>;
+  /** Host folders for container paths by the path inside the container, such as {"/media": "/mnt/user/Media"}. */
+  paths?: Record<string, string>;
+  /** Where app data lives, such as /mnt/user/appdata. Template defaults under any /mnt/<pool>/appdata move here. */
+  appdataRoot?: string;
+  /** The owner's own conventions for an agent to follow, such as how apps are exposed. Never applied automatically. */
+  notes?: string;
+  /** When the profile was last saved. Set by the server. */
+  updatedAt?: string;
+}
+
+/** A change to the profile: fields that are left out stay, and null (or "" for appdataRoot and notes) clears one. */
+export interface SetupProfileUpdate {
+  variables?: Record<string, string | null> | null;
+  paths?: Record<string, string | null> | null;
+  appdataRoot?: string | null;
+  notes?: string | null;
+  dryRun?: boolean;
+}
+
+/** How many containers use each value, most used first. */
+export type ValueCounts = Record<string, number>;
+
+export interface SetupProfileEvidence {
+  /** Containers looked at, running or not. */
+  containers: number;
+  /** Values of the usual convention variables across containers. */
+  variables: Record<string, ValueCounts>;
+  /** Folders containers keep their app data under. */
+  appdataRoots: ValueCounts;
+  /** Host folders under /mnt mounted outside appdata, by the path inside the container. */
+  paths: Record<string, ValueCounts>;
+  /** Docker networks containers use. */
+  networks: ValueCounts;
+  /** The timezone set in Unraid's settings, which Unraid gives every container it creates. */
+  serverTimeZone: string | null;
+}
+
+export interface SetupProfileView {
+  profile: SetupProfile;
+  /** A profile built from the most used values in the containers already installed. */
+  suggested: SetupProfile;
+  evidence: SetupProfileEvidence;
+  /** Things the evidence shows that are worth a look, such as containers on an old timezone. */
+  notices: string[];
+}
+
+export interface SetupProfileUpdateResponse {
+  dryRun: boolean;
+  profile: SetupProfile;
+  /** Which fields changed. */
+  changed: string[];
+  /** The saved file was read back and matches. Absent on a dry run. */
+  verified?: boolean;
+}
+
+/** A template field an install filled from the profile. */
+export interface ProfileApplied {
+  /** The field's name, or its target when it has none. */
+  field: string;
+  /** The value used. Masked fields show "(hidden)". */
+  value: string;
+  /** The template's own default, replaced. */
+  replaced: string;
+  /** The profile entry it came from, such as "variables.TZ", "paths./media" or "appdataRoot". */
+  from: string;
 }
 
 // ── Plugins (.plg) ──────────────────────────────────────

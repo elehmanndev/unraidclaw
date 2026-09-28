@@ -16,6 +16,7 @@ import { createTemplateRuntime, registerTemplateRoutes } from "./routes/template
 import { registerAppRoutes } from "./routes/apps.js";
 import { registerComposeRoutes } from "./routes/compose.js";
 import { registerJobRoutes } from "./routes/jobs.js";
+import { createProfileRuntime, registerProfileRoutes } from "./routes/profile.js";
 import { registerPluginRoutes } from "./routes/plugins.js";
 import { registerVMRoutes } from "./routes/vms.js";
 import { registerArrayRoutes } from "./routes/array.js";
@@ -128,6 +129,7 @@ export function createServer(config: ServerConfig, httpsOpts?: { cert: Buffer; k
   registerAppRoutes(app);
   registerComposeRoutes(app);
   registerJobRoutes(app);
+  registerProfileRoutes(app, createProfileRuntime(caRuntime));
   registerPluginRoutes(app);
   registerVMRoutes(app, gql);
   registerArrayRoutes(app, gql);

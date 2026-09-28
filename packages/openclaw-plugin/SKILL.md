@@ -1,6 +1,6 @@
 ---
 name: unraidclaw
-description: Manage your Unraid server through AI agents - 66 tools for Docker, Community Applications, container settings, app APIs, compose stacks, background jobs, Unraid plugins, VMs, array, shares, system, notifications, and more with permission control.
+description: Manage your Unraid server through AI agents - 68 tools for Docker, Community Applications, container settings, app APIs, compose stacks, background jobs, a setup profile, Unraid plugins, VMs, array, shares, system, notifications, and more with permission control.
 ---
 
 # UnraidClaw
@@ -9,7 +9,7 @@ Manage your Unraid server through AI agents with full permission control.
 
 ## What it does
 
-UnraidClaw gives AI agents 66 tools across 17 categories to monitor and manage an Unraid server:
+UnraidClaw gives AI agents 68 tools across 18 categories to monitor and manage an Unraid server:
 
 - **Docker** - List, inspect, start, stop, restart, pause, unpause, remove, and create containers
 - **Community Applications** - Search the CA catalog, read an app's template, install an app as a container, update an installed app to a newer image, and remove one
@@ -17,6 +17,7 @@ UnraidClaw gives AI agents 66 tools across 17 categories to monitor and manage a
 - **App APIs** - Read or change things inside an installed app through its own web API, with the key the user saved for it
 - **Compose Stacks** - List Docker Compose stacks, read their files with secrets hidden, start, stop and restart them, and edit and redeploy local ones
 - **Background Jobs** - Run long installs, updates, rebuilds and redeploys in the background, with an Unraid notification when they finish
+- **Setup Profile** - Read and change the owner's usual install settings, which every new app install fills in, and see the conventions the installed containers follow
 - **Plugins** - List and inspect installed .plg plugins, install one from a URL, check for updates, update, and remove
 - **VMs** - List, inspect, start, stop, force-stop, pause, resume, and reboot virtual machines
 - **Array** - View array status, start/stop array, run parity checks
@@ -29,7 +30,7 @@ UnraidClaw gives AI agents 66 tools across 17 categories to monitor and manage a
 - **Logs** - Read syslog entries
 - **Health** - Server health check
 
-Tools use a 38-key permission matrix (resource:action) configurable from the Unraid WebGUI; health requires no permission. Activity logging excludes the public health probe, successful MCP handshakes and MCP GET/DELETE responses with status 405. The gateway also has an optional MCP endpoint, off by default, that exposes the same tools to MCP clients; this plugin does not use it.
+Tools use a 40-key permission matrix (resource:action) configurable from the Unraid WebGUI; health requires no permission. Activity logging excludes the public health probe, successful MCP handshakes and MCP GET/DELETE responses with status 405. The gateway also has an optional MCP endpoint, off by default, that exposes the same tools to MCP clients; this plugin does not use it.
 
 ## Updating and removing an installed app
 
@@ -50,6 +51,12 @@ Name only what should change: settings and entries the request leaves out are ke
 Always run it with `dryRun: true` first. Show the user the changes and the command, and ask before running it for real. If the rebuilt container does not start or stops within a few seconds, the original comes back unchanged and the error carries the new container's last log lines. Read them, explain what went wrong, and propose a corrected edit.
 
 This tool changes settings, not the app version, unless you pass `pull: true`: then it pulls the newest image for the tag and rebuilds on it. Use `unraid_ca_update` to update an app first; when it refuses because the container is privileged or has Extra Parameters or devices, update it with `unraid_template_edit` and `pull: true` and nothing else. Changing `Repository` to another tag pulls that tag.
+
+## Following the owner's setup
+
+Call `unraid_profile_get` before installing or setting up an app. Its `profile` holds the values `unraid_ca_install` fills in by itself for any field you leave unset: variables such as TZ, PUID, PGID and UMASK by name, host folders by the path inside the container, and appdata under `appdataRoot`. So do not pass those yourself unless the user wants something different for this app. The plan's `profile` list shows every field it filled; mention them when you read the dry run back. Its `notes` are the owner's own conventions, such as how apps are exposed or named: follow them, and ask when one does not fit.
+
+When the profile is empty, show the user the `suggested` profile and offer to save it with `unraid_profile_update`, then add their own conventions as notes. Pass up the `notices`, such as containers on an old timezone, when they are relevant. Never save passwords or API keys in the profile; the App Keys tab is where keys go.
 
 ## Installing apps that need more access
 

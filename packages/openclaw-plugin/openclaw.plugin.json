@@ -49,6 +49,8 @@
       "unraid_plugin_remove",
       "unraid_plugin_update",
       "unraid_plugins_list",
+      "unraid_profile_get",
+      "unraid_profile_update",
       "unraid_service_list",
       "unraid_share_details",
       "unraid_share_list",
