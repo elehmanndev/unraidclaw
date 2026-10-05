@@ -110,12 +110,7 @@
             ],
             "properties": {
               "source": {
-                "type": "string",
-                "enum": [
-                  "env",
-                  "file",
-                  "exec"
-                ]
+                "type": "string"
               },
               "provider": {
                 "type": "string"
@@ -162,12 +157,7 @@
                   ],
                   "properties": {
                     "source": {
-                      "type": "string",
-                      "enum": [
-                        "env",
-                        "file",
-                        "exec"
-                      ]
+                      "type": "string"
                     },
                     "provider": {
                       "type": "string"

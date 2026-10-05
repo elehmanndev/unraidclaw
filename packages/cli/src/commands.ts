@@ -64,6 +64,30 @@ function optionSchema(schema: Schema): Options[string] {
   return { type: schema.type === "boolean" ? "boolean" : "string", multiple: schema.type === "array" };
 }
 
+/**
+ * parseArgs reads the word after a string option as its value unless that word
+ * starts with a dash, so `--extra-args "--gpus all"` was refused as an unknown
+ * flag. A string option always needs a value, so a dash word following one is
+ * joined to it as `--extra-args=--gpus all`, the form parseArgs accepts. Words
+ * after a bare `--` are left alone, as parseArgs treats them as positionals.
+ */
+function joinDashValues(argv: string[], options: Options): string[] {
+  const args: string[] = [];
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === "--") return [...args, ...argv.slice(index)];
+    const name = arg.startsWith("--") && !arg.includes("=") ? arg.slice(2) : "";
+    const next = argv[index + 1];
+    if (name && options[name]?.type === "string" && next !== undefined && next.startsWith("-") && next !== "--") {
+      args.push(`${arg}=${next}`);
+      index++;
+    } else {
+      args.push(arg);
+    }
+  }
+  return args;
+}
+
 /** Discovery only identifies command words. The second pass rejects unrelated flags. */
 export function parse(argv: string[], catalog: Command[]): Parsed {
   const all: Options = { ...globals };
@@ -73,7 +97,7 @@ export function parse(argv: string[], catalog: Command[]): Parsed {
     if (schema.type === "boolean") all[`no-${flag}`] = { type: "boolean" };
   }
   let discovery;
-  try { discovery = parseArgs({ args: argv, options: all, allowPositionals: true, tokens: true }); }
+  try { discovery = parseArgs({ args: joinDashValues(argv, all), options: all, allowPositionals: true, tokens: true }); }
   catch { return usage("Unknown flag or missing/invalid flag value. See unraidclaw help."); }
   const words = discovery.positionals;
   const firstTwo = words.slice(0, 2).join(" ");
@@ -91,7 +115,7 @@ export function parse(argv: string[], catalog: Command[]): Parsed {
     if (schema.type === "boolean") options[`no-${flag}`] = { type: "boolean" };
   }
   let parsed;
-  try { parsed = parseArgs({ args: argv, options, allowPositionals: true, tokens: true }); }
+  try { parsed = parseArgs({ args: joinDashValues(argv, options), options, allowPositionals: true, tokens: true }); }
   catch { return usage("Unknown flag or missing/invalid flag value for this command. See its --help."); }
   const result: Parsed = { globals: {}, command, words, values: Object.create(null) };
   const positionals = parsed.tokens.filter(token => token.kind === "positional");

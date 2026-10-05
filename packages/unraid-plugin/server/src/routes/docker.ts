@@ -4,10 +4,12 @@ import type { DockerContainer, DockerLogsResponse } from "@unraidclaw/shared";
 import type { GraphQLClient } from "../graphql-client.js";
 import { requirePermission } from "../permissions.js";
 import { writeFile, mkdir } from "node:fs/promises";
+import { isIP } from "node:net";
 import {
   runCommand, validId, validBody, validInteger, type CommandRunner,
   escapeXml,
   sanitizeFilename,
+  splitArgs,
   VALID_IMAGE_RE,
   VALID_PORT_RE,
   VALID_VOLUME_RE,
@@ -15,6 +17,9 @@ import {
   VALID_NETWORK_RE,
   VALID_NAME_RE,
   VALID_RESTART_VALUES,
+  VALID_CPUSET_RE,
+  VALID_DEVICE_RE,
+  NETWORKS_WITHOUT_STATIC_IP,
 } from "../docker-common.js";
 
 interface DockerCreateBody {
@@ -28,6 +33,17 @@ interface DockerCreateBody {
   labels?: Record<string, string>;
   icon?: string;
   webui?: string;
+  /** Unraid's Extra Parameters: docker run options, space separated. */
+  extraArgs?: string;
+  /** Unraid's Post Arguments: the container command, space separated. */
+  postArgs?: string;
+  /** Unraid's Fixed IP address, on a user-defined network only. */
+  staticIp?: string;
+  privileged?: boolean;
+  /** Unraid's CPU pinning, as docker's --cpuset-cpus reads it. */
+  cpuset?: string;
+  /** Host devices, as docker's --device reads them. */
+  devices?: string[];
 }
 
 const LIST_QUERY = `query {
@@ -210,10 +226,12 @@ export function registerDockerRoutes(app: FastifyInstance, gql: GraphQLClient, o
     preHandler: requirePermission(Resource.DOCKER, Action.CREATE),
     handler: async (req, reply) => {
       const body = req.body;
-      if (!validBody(body, ["image", "name", "ports", "volumes", "env", "restart", "network", "labels", "icon", "webui"])
+      if (!validBody(body, ["image", "name", "ports", "volumes", "env", "restart", "network", "labels", "icon", "webui",
+        "extraArgs", "postArgs", "staticIp", "privileged", "cpuset", "devices"])
         || typeof body.image !== "string"
-        || ["name", "restart", "network", "icon", "webui"].some((key) => body[key] !== undefined && typeof body[key] !== "string")
-        || ["ports", "volumes", "env"].some((key) => body[key] !== undefined && (!Array.isArray(body[key]) || !(body[key] as unknown[]).every((v) => typeof v === "string")))
+        || ["name", "restart", "network", "icon", "webui", "extraArgs", "postArgs", "staticIp", "cpuset"].some((key) => body[key] !== undefined && typeof body[key] !== "string")
+        || ["ports", "volumes", "env", "devices"].some((key) => body[key] !== undefined && (!Array.isArray(body[key]) || !(body[key] as unknown[]).every((v) => typeof v === "string")))
+        || (body.privileged !== undefined && typeof body.privileged !== "boolean")
         || (body.labels !== undefined && (!validBody(body.labels, Object.keys(body.labels ?? {})) || Object.entries(body.labels).some(([key, value]) => !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,254}$/.test(key) || typeof value !== "string")))) {
         return reply.status(400).send({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid container fields or types" } });
       }
@@ -228,6 +246,12 @@ export function registerDockerRoutes(app: FastifyInstance, gql: GraphQLClient, o
         labels = {},
         icon,
         webui,
+        extraArgs,
+        postArgs,
+        staticIp,
+        privileged = false,
+        cpuset,
+        devices = [],
       } = req.body;
 
       // Validate inputs
@@ -258,16 +282,50 @@ export function registerDockerRoutes(app: FastifyInstance, gql: GraphQLClient, o
           return reply.status(400).send({ ok: false, error: { code: "VALIDATION_ERROR", message: `Invalid env var format (expected KEY=VALUE): ${e.split("=")[0]}` } });
         }
       }
+      for (const d of devices) {
+        if (!VALID_DEVICE_RE.test(d) || d.split(":").some((part) => part.split("/").includes(".."))) {
+          return reply.status(400).send({ ok: false, error: { code: "VALIDATION_ERROR", message: `Invalid device (expected /dev/<host>[:/<container>][:rwm]): ${d}` } });
+        }
+      }
+      if (cpuset !== undefined && !VALID_CPUSET_RE.test(cpuset)) {
+        return reply.status(400).send({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid cpuset (expected CPU numbers and ranges such as 0-3,8)" } });
+      }
+      // isIP also accepts a zone-scoped IPv6 address such as fe80::1%eth0,
+      // which docker does not, so the alphabet is checked as well.
+      const ipVersion = staticIp === undefined || !/^[0-9a-fA-F:.]+$/.test(staticIp) ? 0 : isIP(staticIp);
+      if (staticIp !== undefined && ipVersion === 0) {
+        return reply.status(400).send({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid staticIp (expected an IPv4 or IPv6 address)" } });
+      }
+      if (staticIp !== undefined && NETWORKS_WITHOUT_STATIC_IP.has(network.toLowerCase())) {
+        return reply.status(400).send({ ok: false, error: { code: "VALIDATION_ERROR", message: `staticIp needs a user-defined network such as a macvlan, ipvlan or custom bridge, not ${network}` } });
+      }
+      // Both free-form fields are checked here, before any command runs, and
+      // the same text is written to the template, where Unraid later passes it
+      // to the shell unescaped. splitArgs accepts nothing the shell could act on.
+      const extraTokens = extraArgs === undefined ? [] : splitArgs(extraArgs);
+      if (extraTokens === null || (extraTokens.length > 0 && !extraTokens[0].startsWith("-"))) {
+        return reply.status(400).send({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid extraArgs (expected docker run options separated by single spaces, using only letters, digits and : . , / + = _ -)" } });
+      }
+      const postTokens = postArgs === undefined ? [] : splitArgs(postArgs);
+      if (postTokens === null) {
+        return reply.status(400).send({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid postArgs (expected command arguments separated by single spaces, using only letters, digits and : . , / + = _ -)" } });
+      }
 
       const containerName = name ?? image.split("/").pop()?.split(":")[0] ?? "container";
 
+      // The same order as Unraid's own command builder, so a container built
+      // here matches one the Docker tab would build from the saved template.
       const args = ["run", "-d"];
       if (name) args.push("--name", name);
       if (restart) args.push("--restart", restart);
       if (network) args.push("--network", network);
+      if (staticIp) args.push(ipVersion === 6 ? "--ip6" : "--ip", staticIp);
+      if (cpuset) args.push("--cpuset-cpus", cpuset);
+      if (privileged) args.push("--privileged=true");
       for (const p of ports) args.push("-p", p);
       for (const v of volumes) args.push("-v", v);
       for (const e of env) args.push("-e", e);
+      for (const d of devices) args.push("--device", d);
 
       // Add Unraid managed labels so container appears as first-class citizen in UI
       const allLabels: Record<string, string> = {
@@ -279,7 +337,7 @@ export function registerDockerRoutes(app: FastifyInstance, gql: GraphQLClient, o
       for (const [k, v] of Object.entries(allLabels)) {
         args.push("--label", `${k}=${v}`);
       }
-      args.push("--", image);
+      args.push(...extraTokens, "--", image, ...postTokens);
 
       // Pre-create host volume directories (only under /mnt/)
       for (const v of volumes) {
@@ -314,6 +372,12 @@ export function registerDockerRoutes(app: FastifyInstance, gql: GraphQLClient, o
           return `  <Config Name="${escapeXml(container)}" Target="${escapeXml(container)}" Default="" Mode="${escapeXml(mode)}" Description="" Type="Path" Display="always" Required="false" Mask="false">${escapeXml(host)}</Config>`;
         }).join("\n");
 
+        const deviceConfigs = devices.map((d) => {
+          // Unraid reads the whole value back as the --device argument and
+          // ignores Target for devices, so the value carries the full mapping.
+          return `  <Config Name="Device ${escapeXml(d.split(":")[0])}" Target="" Default="" Mode="" Description="" Type="Device" Display="always" Required="false" Mask="false">${escapeXml(d)}</Config>`;
+        }).join("\n");
+
         const envConfigs = env.map((e) => {
           const [key, ...rest] = e.split("=");
           const val = rest.join("=");
@@ -329,9 +393,9 @@ export function registerDockerRoutes(app: FastifyInstance, gql: GraphQLClient, o
   <Repository>${escapeXml(image)}</Repository>
   <Registry>${escapeXml(registry)}</Registry>
   <Network>${escapeXml(network)}</Network>
-  <MyIP/>
+  <MyIP>${escapeXml(staticIp ?? "")}</MyIP>
   <Shell>sh</Shell>
-  <Privileged>false</Privileged>
+  <Privileged>${privileged ? "true" : "false"}</Privileged>
   <Support/>
   <Project/>
   <Overview>Deployed by UnraidClaw</Overview>
@@ -339,14 +403,15 @@ export function registerDockerRoutes(app: FastifyInstance, gql: GraphQLClient, o
   <WebUI>${escapeXml(webui ?? "")}</WebUI>
   <TemplateURL/>
   <Icon>${escapeXml(icon ?? "")}</Icon>
-  <ExtraParams/>
-  <PostArgs/>
-  <CPUset/>
+  <ExtraParams>${escapeXml(extraArgs ?? "")}</ExtraParams>
+  <PostArgs>${escapeXml(postArgs ?? "")}</PostArgs>
+  <CPUset>${escapeXml(cpuset ?? "")}</CPUset>
   <DateInstalled>${dateInstalled}</DateInstalled>
   <Requires/>
 ${portConfigs}
 ${volumeConfigs}
 ${envConfigs}
+${deviceConfigs}
 </Container>`;
 
         const safeContainerName = sanitizeFilename(containerName);
