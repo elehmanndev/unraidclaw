@@ -36,3 +36,21 @@ if (missing.length || extra.length) {
   process.exit(1);
 }
 console.log(`contracts.tools OK: ${declared.size} tools declared and registered.`);
+
+// Guard: the SecretRef branch of an apiKey schema must not enumerate sources.
+// OpenClaw validates the source itself and adds new ones over time (store came
+// in 2026.9); a list here rejects a ref the gateway would resolve (issue #19).
+const props = manifest.configSchema?.properties ?? {};
+const apiKeySchemas = {
+  apiKey: props.apiKey,
+  'servers[].apiKey': props.servers?.items?.properties?.apiKey,
+};
+for (const [path, schema] of Object.entries(apiKeySchemas)) {
+  const ref = schema?.anyOf?.find((s) => s.type === 'object');
+  const source = ref?.properties?.source;
+  if (!source || source.type !== 'string' || 'enum' in source || 'const' in source) {
+    console.error(`configSchema ${path}: the SecretRef source must be a plain string with no enum, so OpenClaw decides which sources exist.`);
+    process.exit(1);
+  }
+}
+console.log('configSchema OK: apiKey SecretRef sources are not restricted.');

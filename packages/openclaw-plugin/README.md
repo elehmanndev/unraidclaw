@@ -95,7 +95,7 @@ You don't have to hard-code the key in `openclaw.json`. Two options:
 "apiKey": { "source": "file", "provider": "default", "id": "/unraidclaw_key" }
 ```
 
-`source` is one of `file`, `env`, or `exec`; `provider` names a provider from your `secrets.providers` config; `id` is the lookup key. Both forms also work per-server on `servers[].apiKey`. (Requires unraidclaw 0.1.12+.)
+`source` is any source your OpenClaw version supports (`env`, `file`, `exec`, and `store` on OpenClaw 2026.9 or later); `provider` names a provider from your `secrets.providers` config; `id` is the lookup key. Both forms also work per-server on `servers[].apiKey`. (Requires unraidclaw 0.1.12+; the `store` source requires 0.1.17+.)
 
 ## Usage
 
@@ -151,6 +151,8 @@ The four compose tools manage Docker Compose stacks. Stacks deployed from a git 
 `unraid_job_start` runs a long install, update, container edit, compose change or plugin operation in the background and returns at once; `unraid_job_get` and `unraid_job_list` read it back, and an Unraid notification says when it is done. The tool's own permission still applies.
 
 `unraid_profile_get` reads the owner's setup profile, the values every new install fills in, with a profile suggested from the installed containers and the evidence for it. `unraid_profile_update` changes it and takes `dryRun`.
+
+`unraid_docker_create` takes `image` plus optional `name`, `ports`, `volumes`, `env`, `restart` and `network`, and the advanced settings of Unraid's container form: `extraArgs` (Extra Parameters, docker run options such as `--gpus all` or `--memory=8g`), `postArgs` (Post Arguments, the container command), `staticIp` (a fixed IPv4 or IPv6 address, which needs a macvlan, ipvlan or custom bridge network), `privileged`, `cpuset` and `devices`. Each is saved to the matching field of the container's template. The two free-form fields accept only letters, digits, `: . , / + = _ -` and single spaces, because Unraid passes them to the shell unescaped when it rebuilds a container. A container created with any of these settings in effect cannot be rebuilt by `unraid_ca_update`, which refuses settings it does not reproduce exactly; use the Docker tab for it.
 
 The six plugin tools manage Unraid `.plg` plugins through Unraid's own plugin manager. Installing one runs vendor code as root, checking for an update downloads a plugin file and stages it, and removing one runs the plugin's removal script, which may take its data with it. All four mutating tools take `dryRun`.
 

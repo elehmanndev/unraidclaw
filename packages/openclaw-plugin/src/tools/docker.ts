@@ -119,7 +119,7 @@ export function registerDockerTools(api: any, getClient: ClientResolver): void {
   api.registerTool({
     name: "unraid_docker_create",
     description:
-      "Create and start a new Docker container on the Unraid server. Specify image, optional name, port mappings, volume mounts, environment variables, restart policy, and network.",
+      "Create and start a new Docker container on the Unraid server. Specify image, optional name, port mappings, volume mounts, environment variables, restart policy, network, and Unraid's advanced settings: extra docker run options, post arguments, a fixed IP on a custom network, privileged mode, CPU pinning and host devices.",
     parameters: {
       type: "object",
       properties: {
@@ -146,6 +146,27 @@ export function registerDockerTools(api: any, getClient: ClientResolver): void {
           description: "Restart policy (default: unless-stopped)",
         },
         network: { type: "string", description: "Network to attach the container to" },
+        extraArgs: {
+          type: "string",
+          description:
+            "Extra docker run options, space separated, as Unraid's Extra Parameters field (e.g. '--gpus all', '--cap-add=SYS_ADMIN --memory=8g', '--hostname=media'). Must start with an option. Only letters, digits, : . , / + = _ - and single spaces; no quotes or shell characters.",
+        },
+        postArgs: {
+          type: "string",
+          description:
+            "Arguments appended after the image as the container command, space separated, as Unraid's Post Arguments field (e.g. '--config /config/app.yml'). Same character rules as extraArgs.",
+        },
+        staticIp: {
+          type: "string",
+          description: "Fixed IPv4 or IPv6 address for the container (Unraid's Fixed IP field). Needs a user-defined network such as a macvlan, ipvlan or custom bridge; docker refuses it on bridge, host and none.",
+        },
+        privileged: { type: "boolean", description: "Run the container privileged, with full host access (default: false)" },
+        cpuset: { type: "string", description: "CPUs the container may run on, as docker --cpuset-cpus reads it (e.g. '0-3,8')" },
+        devices: {
+          type: "array",
+          items: { type: "string" },
+          description: "Host devices to pass through, as docker --device reads them (e.g. ['/dev/dri', '/dev/ttyUSB0:/dev/ttyUSB0:rwm'])",
+        },
         server: { type: "string", description: "Target server name (optional, uses default server)" },
       },
       required: ["image"],

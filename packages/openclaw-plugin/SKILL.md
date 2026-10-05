@@ -42,6 +42,19 @@ Remove deletes the container only. Appdata, Docker volumes, the image and the sa
 
 Both take `dryRun: true`. Use it first for a removal, and read the result back to the user before doing it for real.
 
+## Creating a container by hand
+
+`unraid_docker_create` takes `image` plus optional `name`, `ports`, `volumes`, `env`, `restart` and `network`. Six more fields match the advanced settings of Unraid's container form and are saved to the container's template, so the Docker tab shows them:
+
+- `extraArgs` is Extra Parameters: docker run options, space separated, such as `--gpus all`, `--cap-add=SYS_ADMIN`, `--memory=8g` or `--hostname=media`. Put the network in `network`, not here.
+- `postArgs` is Post Arguments: the command appended after the image, such as `--config /config/app.yml`.
+- `staticIp` is a fixed IPv4 or IPv6 address. Docker only accepts it on a macvlan, ipvlan or custom bridge network, so pass `network` too; it is rejected on bridge, host and none.
+- `privileged` is a boolean and defaults to false. Say so to the user before turning it on, since it gives the container full host access.
+- `cpuset` pins CPUs, as `--cpuset-cpus` reads it, for example `0-3,8`.
+- `devices` lists host devices, as `--device` reads them, for example `["/dev/dri"]` for hardware transcoding.
+
+The two free-form fields accept only letters, digits, `: . , / + = _ -` and single spaces, because Unraid passes them to the shell unescaped when it rebuilds a container. Quotes and shell characters are rejected before docker runs. A container created with any of these settings in effect cannot later be rebuilt by `unraid_ca_update`; tell the user to update it from the Docker tab.
+
 ## Changing an installed container's settings
 
 To change how an installed container runs, such as a port, a path, a variable, a device, its network or fixed IP, privileged mode or Extra Parameters, use `unraid_template_edit` rather than removing and recreating the container. Call `unraid_template_get` first to see what the template has, and use the installed container name from `unraid_docker_list`.

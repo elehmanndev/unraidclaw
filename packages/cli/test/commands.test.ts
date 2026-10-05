@@ -78,6 +78,21 @@ test("args-json reads files and named flags override its values", async t => {
   await assert.rejects(args(["docker", "logs", "--args-json", "@/does-not-exist"]), /Cannot read/);
 });
 
+test("string flag values that start with a dash are accepted in both flag forms", async () => {
+  const spaced = ["docker", "create", "--image", "alpine", "--extra-args", "--gpus all --memory=8g", "--post-args", "--config /config/app.yml"];
+  const expected = { image: "alpine", extraArgs: "--gpus all --memory=8g", postArgs: "--config /config/app.yml" };
+  assert.deepEqual(await argumentsFor(parse(spaced, catalog)), expected);
+  assert.deepEqual(await argumentsFor(parse(["docker", "create", "--image", "alpine", "--extra-args=--gpus all --memory=8g", "--post-args=--config /config/app.yml"], catalog)), expected);
+  // A global string flag takes a dash value the same way, and a boolean flag never swallows the next word.
+  const parsed = parse(["--key", "-not-a-flag", "docker", "create", "--yes", "--image", "alpine"], catalog);
+  assert.equal(parsed.globals.key, "-not-a-flag");
+  assert.equal(parsed.globals.yes, true);
+  assert.deepEqual(await argumentsFor(parsed), { image: "alpine" });
+  // A string flag with no value still fails as usage, and words after -- stay positional for the gateway to judge.
+  assert.throws(() => parse(["docker", "create", "--image"], catalog), /Unknown flag or missing/);
+  assert.deepEqual(await argumentsFor(parse(["docker", "inspect", "--", "--not-an-id"], catalog)), { id: "--not-an-id" });
+});
+
 test("gateway and plugin source URL flags remain unambiguous", async () => {
   const parsed = parse(["--url", "https://127.0.0.1:9876", "plugin", "install", "--url", "https://example.invalid/fixture.plg"], catalog);
   assert.equal(parsed.globals.url, "https://127.0.0.1:9876");

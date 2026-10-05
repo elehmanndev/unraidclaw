@@ -39,6 +39,34 @@ export const VALID_NETWORK_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 export const VALID_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 export const VALID_RESTART_VALUES = new Set(["no", "always", "unless-stopped", "on-failure"]);
 
+// Extra Parameters and Post Arguments, the two free-form fields of an Unraid
+// template. UnraidClaw hands their tokens to docker through execFile, but the
+// saved template is later concatenated into a /bin/sh command line unescaped
+// whenever the container is edited or updated from the WebGUI, so the alphabet
+// keeps out every quote, shell metacharacter, whitespace other than the single
+// spaces between tokens, and control character. Anything else is refused.
+export const VALID_ARG_TOKEN_RE = /^[a-zA-Z0-9:.,/+=_-]+$/;
+export const MAX_ARGS_LENGTH = 2048;
+
+/** The tokens of a free-form argument string, or null when it is not accepted. */
+export function splitArgs(value: string): string[] | null {
+  if (value.length === 0 || value.length > MAX_ARGS_LENGTH) return null;
+  const tokens = value.split(" ");
+  return tokens.every((token) => VALID_ARG_TOKEN_RE.test(token)) ? tokens : null;
+}
+
+// A cpuset as docker's --cpuset-cpus reads it: CPU numbers and ranges, comma
+// separated. Unraid stores the same text in the template's CPUset field.
+export const VALID_CPUSET_RE = /^\d{1,4}(-\d{1,4})?(,\d{1,4}(-\d{1,4})?)*$/;
+
+// A device passthrough as docker's --device reads it: a host path under /dev,
+// optionally a container path and the rwm permissions. Unraid stores the whole
+// value in a Device config entry and passes it back to docker as --device.
+export const VALID_DEVICE_RE = /^\/dev\/[a-zA-Z0-9_.+/-]+(:\/[a-zA-Z0-9_.+/-]+)?(:[rwm]{1,3})?$/;
+
+/** Networks on which docker refuses a fixed container address. */
+export const NETWORKS_WITHOUT_STATIC_IP = new Set(["bridge", "host", "none"]);
+
 export function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9_.-]/g, "_");
 }
