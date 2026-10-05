@@ -95,7 +95,7 @@ You don't have to hard-code the key in `openclaw.json`. Two options:
 "apiKey": { "source": "file", "provider": "default", "id": "/unraidclaw_key" }
 ```
 
-`source` is one of `file`, `env`, or `exec`; `provider` names a provider from your `secrets.providers` config; `id` is the lookup key. Both forms also work per-server on `servers[].apiKey`. (Requires unraidclaw 0.1.12+.)
+`source` is any source your OpenClaw version supports (`env`, `file`, `exec`, and `store` on OpenClaw 2026.9 or later); `provider` names a provider from your `secrets.providers` config; `id` is the lookup key. Both forms also work per-server on `servers[].apiKey`. (Requires unraidclaw 0.1.12+; the `store` source requires 0.1.17+.)
 
 ## Usage
 
