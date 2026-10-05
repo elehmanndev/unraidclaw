@@ -39,6 +39,9 @@ jobs:
       - name: Open or refresh the sync pull request
         env:
           GH_TOKEN: ${{ github.token }}
+          # gh prefers a remote named upstream, which would aim the pull
+          # request at emaspa/unraidclaw. Pin it to this repository.
+          GH_REPO: ${{ github.repository }}
         run: |
           NEW="$(git rev-list --count origin/main..upstream/main)"
           if [ "$NEW" -eq 0 ]; then
