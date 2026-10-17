@@ -134,6 +134,55 @@ export function isSpecificDevice(path: string): boolean {
   return parts.length > 0 && parts.every((p) => p !== "" && p !== "." && p !== ".." && !/\s/.test(p));
 }
 
+/**
+ * Names that usually hold a secret. Templates often leave Mask="false" on a
+ * token or password, so a value is also treated as secret when its variable
+ * or label name contains one of these words, case-insensitive.
+ */
+export const SECRET_NAME_RE = /TOKEN|SECRET|PASSWORD|PASS|KEY|APIKEY|AUTH|CREDENTIAL/i;
+
+/** True when a config entry's value must not be shown: masked, or held under a secret-looking name. */
+export function isSecretEntry(entry: { type: string; target: string; name?: string; mask: boolean }): boolean {
+  if (entry.mask) return true;
+  if (entry.type !== "Variable" && entry.type !== "Label") return false;
+  return SECRET_NAME_RE.test(entry.target) || (entry.name !== undefined && SECRET_NAME_RE.test(entry.name));
+}
+
+/**
+ * Values to hide from a preview: every masked or secret-named value, longest
+ * first so a value that contains another is replaced before its substring is.
+ * A value under a secret-looking name that is shorter than six characters,
+ * such as "true" for AUTH_ENABLED, is left out of the text-wide replacement,
+ * which would otherwise garble unrelated text; redactValues still hides it
+ * wherever it appears as NAME=value.
+ */
+export function secretValues(config: Array<{ type: string; target: string; name?: string; mask: boolean; value: string }>): string[] {
+  return [...new Set(config
+    .filter((c) => c.value.trim() !== "" && (c.mask || (isSecretEntry(c) && c.value.trim().length >= 6)))
+    .map((c) => c.value))]
+    .sort((a, b) => b.length - a.length);
+}
+
+// NAME=value, with the name and the value each optionally quoted, as Unraid's
+// xmlToCommand writes -e 'NAME'='value'.
+const ASSIGNMENT_RE = /(['"]?)([A-Za-z_][A-Za-z0-9_.-]*)\1=('[^']*'|"[^"]*"|[^\s'"]+)/g;
+
+/**
+ * Hide secrets in a text: every known secret value becomes `***`, and so does
+ * the value of any `NAME=value` whose name looks secret, quoted or not, so a
+ * command line or an error that quotes one does not leak it.
+ */
+export function redactText(secrets: string[], text: string): string {
+  let out = text;
+  for (const secret of secrets) out = out.split(secret).join("***");
+  return out.replace(ASSIGNMENT_RE, (whole, quote: string, name: string) => (SECRET_NAME_RE.test(name) ? `${quote}${name}${quote}=***` : whole));
+}
+
+/** redactText for each entry of an env list or an argv. */
+export function redactValues(secrets: string[], values: string[]): string[] {
+  return values.map((v) => redactText(secrets, v));
+}
+
 export class CaInstallError extends Error {
   constructor(
     message: string,
@@ -661,16 +710,19 @@ export function buildPlan(
   templatePath: string,
   templateXml: string
 ): CaInstallPlan {
+  // The plan goes back to the caller and into job results, so masked and
+  // secret-named values are hidden. The template written to flash keeps them.
+  const secrets = secretValues(resolved.config);
   return {
     name: resolved.name,
     repo: app.repo,
     image: resolved.image,
     network: resolved.network,
-    ports: resolved.ports,
-    volumes: resolved.volumes,
-    env: resolved.env,
+    ports: redactValues(secrets, resolved.ports),
+    volumes: redactValues(secrets, resolved.volumes),
+    env: redactValues(secrets, resolved.env),
     templatePath,
-    templateXml,
-    dockerCommandPreview: previewDockerCommand(resolved, app),
+    templateXml: redactText(secrets, templateXml),
+    dockerCommandPreview: redactValues(secrets, previewDockerCommand(resolved, app)),
   };
 }

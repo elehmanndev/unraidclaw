@@ -19,6 +19,9 @@ import {
   CA_NAME_RE,
   CaInstallError,
   memoryLimitProblem,
+  redactText,
+  redactValues,
+  secretValues,
   normalizeMemoryLimit,
   parseMemoryBytes,
   type ResolvedTemplate,
@@ -669,18 +672,18 @@ export interface CreateOptions {
 }
 
 /**
- * Values the template marks as secrets, longest first so a value that contains
- * another is replaced before its substring is.
+ * Values the template marks as secrets or holds under a secret-looking name,
+ * longest first so a value that contains another is replaced before its
+ * substring is.
  */
 export function maskedValues(tpl: SavedTemplate): string[] {
-  return tpl.resolved.config
-    .filter((c) => c.mask && c.value.trim() !== "")
-    .map((c) => c.value)
-    .sort((a, b) => b.length - a.length);
+  return secretValues(tpl.resolved.config);
 }
 
 /**
- * Replace every masked value with `***`.
+ * Replace every secret value with `***`, and the value of any NAME=value whose
+ * name looks secret, such as TUNNEL_TOKEN=..., even when the template leaves
+ * Mask="false" on it.
  *
  * The plan, the command preview and any error text go back to the caller and
  * into the activity log, and a template's masked fields are its passwords and
@@ -688,13 +691,18 @@ export function maskedValues(tpl: SavedTemplate): string[] {
  * redacted.
  */
 export function redactSecrets(secrets: string[], text: string): string {
+  return redactText(secrets, text);
+}
+
+/** Replace only the given values, with no name heuristic. For app API traffic. */
+export function replaceSecrets(secrets: string[], text: string): string {
   let out = text;
   for (const secret of secrets) out = out.split(secret).join("***");
   return out;
 }
 
 export function redactArgv(secrets: string[], argv: string[]): string[] {
-  return argv.map((arg) => redactSecrets(secrets, arg));
+  return redactValues(secrets, argv);
 }
 
 /**

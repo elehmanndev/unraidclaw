@@ -513,6 +513,29 @@ test("masked values never appear in a change or a view", () => {
   assert.doesNotMatch(JSON.stringify(view), /new-secret|hunter2/);
 });
 
+test("a secret-named variable with Mask false is hidden in changes and views", () => {
+  const fake = "fake-tunnel-token-not-real-0000";
+  const configs = `\n  <Config Name="Tunnel token" Target="TUNNEL_TOKEN" Default="" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">${fake}</Config>`;
+  const out = applyTemplateEdit(templateXml({ configs }), "t.xml", parseTemplateEditBody({ config: [{ type: "Variable", target: "TUNNEL_TOKEN", value: "fake-new-token-0001" }] }));
+  assert.deepEqual(out.changes, [{ field: "Variable TUNNEL_TOKEN", before: "***", after: "***" }]);
+  const added = applyTemplateEdit(templateXml(), "t.xml", parseTemplateEditBody({ config: [{ type: "Variable", target: "DB_PASSWORD", value: "fake-db-pass-0002" }] }));
+  assert.deepEqual(added.changes, [{ field: "Variable DB_PASSWORD", before: "", after: "***" }]);
+  const view = templateView(templateXml({ configs }), "t.xml");
+  const entry = view.config.find((c) => c.target === "TUNNEL_TOKEN");
+  assert.equal(entry?.value, "***");
+  assert.equal(entry?.mask, false, "the template's own Mask attribute is reported as it is");
+  assert.equal(view.config.find((c) => c.target === "PUID")?.value, "99");
+  assert.doesNotMatch(JSON.stringify(view), new RegExp(fake));
+});
+
+test("redaction hides secret-named assignments in text, quoted or not", async () => {
+  const { redactText } = await import("../src/ca-template.js");
+  assert.equal(redactText([], "-e TUNNEL_TOKEN=abc -e PUID=99"), "-e TUNNEL_TOKEN=*** -e PUID=99");
+  assert.equal(redactText([], "-e 'TUNNEL_TOKEN'='abc def' -e 'PUID'='99'"), "-e 'TUNNEL_TOKEN'=*** -e 'PUID'='99'");
+  assert.equal(redactText([], "api_key=x my_secret=y Password=z credential=w AuthHeader=v"), "api_key=*** my_secret=*** Password=*** credential=*** AuthHeader=***");
+  assert.equal(redactText(["fake-value-123"], "saw fake-value-123 here"), "saw *** here");
+});
+
 // ── Permissions ─────────────────────────────────────────────────
 
 test("reading and editing are off in a default permission file", async () => {

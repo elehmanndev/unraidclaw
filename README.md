@@ -23,7 +23,7 @@ UnraidClaw sits between AI agents and your Unraid servers. It provides a REST AP
 
 ## Features
 
-- **68 tools** across 18 categories: Health, Docker, Community Applications, Container Settings, App APIs, Compose Stacks, Background Jobs, Setup Profile, Plugins, VMs, Array, Disks, Shares, System, Notifications, Network, Users, Logs
+- **71 tools** across 18 categories: Health, Docker, Community Applications, Container Settings, App APIs, Compose Stacks, Background Jobs, Setup Profile, Plugins, VMs, Array, Disks, Shares, System, Notifications, Network, Users, Logs
 - **40 permission keys** in a resource:action matrix, configurable from the WebGUI
 - **HTTPS** with auto-generated self-signed TLS certificate
 - **SHA-256 API key** authentication
@@ -145,6 +145,9 @@ REST authentication uses the `x-api-key: <api-key>` header. `/api/health` is pub
 | | POST | `/api/docker/containers` | `docker:create` |
 | | POST | `/api/docker/containers/:id/:action` | `docker:update` |
 | | DELETE | `/api/docker/containers/:id` | `docker:delete` |
+| | GET | `/api/docker/images` | `docker:read` |
+| | POST | `/api/docker/images/prune` | `docker:delete` |
+| | GET | `/api/docker/updates` | `docker:read` |
 | **Community Apps** | GET | `/api/ca/search?q=` | `ca:read` |
 | | GET | `/api/ca/app/:name` | `ca:read` |
 | | POST | `/api/ca/app/:name/install` | `ca:create` |
@@ -298,7 +301,7 @@ Remove deletes only the container. Appdata, Docker volumes, the image and the sa
 
 ### Container settings
 
-`GET /api/template/:name` returns an installed container's saved template: its settings (image, network, fixed IP, privileged mode, Extra Parameters, Post Arguments, CPU pinning, memory limit, Tailscale) and every port, path, variable, label and device. Values marked `Mask="true"` come back as `***`.
+`GET /api/template/:name` returns an installed container's saved template: its settings (image, network, fixed IP, privileged mode, Extra Parameters, Post Arguments, CPU pinning, memory limit, Tailscale) and every port, path, variable, label and device. Values marked `Mask="true"` come back as `***`, and so do variables and labels whose name contains `TOKEN`, `SECRET`, `PASSWORD`, `PASS`, `KEY`, `APIKEY`, `AUTH` or `CREDENTIAL` in any case, since templates often leave a token unmasked. The same rule hides values in install and update plans, command previews, edit changes, errors and job results; the container still gets the real value.
 
 `POST /api/template/:name/edit` changes the template and rebuilds the container from it, the way editing it on the Docker tab and clicking **Apply** does. The name is the installed container name from the Docker tab.
 
@@ -364,7 +367,7 @@ Unraid has no Compose of its own, so every Compose command runs in a throwaway `
 { "tool": "unraid_ca_update", "arguments": { "name": "jellyfin" }, "notify": true }
 ```
 
-A job is a tool call run later: the named tool runs through the same definition and `/api/` route as an MCP or CLI call, in process, with the submitter's API key. The route's own permission, validation and activity logging apply unchanged, so `jobs:create` alone runs nothing. Only these tools can be jobs, since everything else is quick: `unraid_ca_install`, `unraid_ca_update`, `unraid_template_edit`, `unraid_compose_action`, `unraid_compose_edit`, `unraid_plugin_install` and `unraid_plugin_update`. Arguments are checked against the tool's schema before anything is queued.
+A job is a tool call run later: the named tool runs through the same definition and `/api/` route as an MCP or CLI call, in process, with the submitter's API key. The route's own permission, validation and activity logging apply unchanged, so `jobs:create` alone runs nothing. Only these tools can be jobs, since everything else is quick: `unraid_ca_install`, `unraid_ca_update`, `unraid_template_edit`, `unraid_compose_action`, `unraid_compose_edit`, `unraid_plugin_install`, `unraid_plugin_update` and `unraid_docker_prune_images`. Arguments are checked against the tool's schema before anything is queued.
 
 Two jobs run at a time and the rest wait. When one finishes, an Unraid notification says so, through `POST /api/notifications`, which needs `notification:create`; Unraid forwards it to a phone when a notification agent is set up. `"notify": false` turns it off.
 
@@ -409,6 +412,79 @@ Every mutating Plugins endpoint accepts `{"dryRun": true}` to return a plan with
 ### Docker actions
 
 `POST /api/docker/containers/:id/:action` where action is one of: `start`, `stop`, `restart`, `pause`, `unpause`
+
+### Docker images
+
+`GET /api/docker/images` lists every image with the containers, running or stopped, that were created from it:
+
+```json
+{
+  "images": [
+    {
+      "id": "sha256:4f1c...",
+      "repoTags": ["lscr.io/linuxserver/plex:latest"],
+      "sizeBytes": 352187392,
+      "created": "2026-10-01T04:12:09Z",
+      "dangling": false,
+      "inUseBy": ["plex"],
+      "unused": false
+    }
+  ],
+  "totals": { "count": 41, "sizeBytes": 18234511360, "danglingCount": 9, "danglingSizeBytes": 2147483648, "unusedCount": 14, "unusedSizeBytes": 4294967296 }
+}
+```
+
+`dangling` means the image has no tag; `unused` means no container references it.
+
+`POST /api/docker/images/prune` removes images no container references. It needs `docker:delete`. The body is optional:
+
+```json
+{ "dryRun": true, "mode": "dangling", "olderThanHours": 72 }
+```
+
+`mode` is `dangling` (the default, untagged images only) or `unused` (any image no container uses, tagged or not). `olderThanHours` keeps images created more recently. Unknown fields, a `dryRun` that is not a boolean and an `olderThanHours` that is not a whole number from 0 to 87600 are refused before docker runs. An image that a container uses, including a stopped one, is never selected. A dry run returns exactly the images that would go:
+
+```json
+{
+  "dryRun": true,
+  "mode": "dangling",
+  "olderThanHours": 72,
+  "images": [{ "id": "sha256:9b2e...", "repoTags": [], "sizeBytes": 104857600, "created": "2026-09-02T10:00:00Z" }],
+  "reclaimableBytes": 104857600,
+  "removed": [],
+  "failed": [],
+  "reclaimedBytes": 0,
+  "verified": false
+}
+```
+
+A real run removes each selected image with `docker rmi -- <id>`, without force, so docker also refuses one that is in use; an image under several tags is removed by the tags it was listed with, since docker refuses to remove such an image by ID. `docker image prune` is never used, so what is removed is exactly the list. A fresh listing then checks the images are gone. `removed`, `failed` (with docker's error) and `reclaimedBytes` report the outcome, and `verified` is true when every image docker removed without error is no longer listed; otherwise the response is a 500 `VERIFICATION_FAILED` that still carries the result. `reclaimedBytes` sums image sizes, so layers shared with other images can make the space actually freed smaller. A run selects at most 500 images. Use `mode: "unused"` with care: an app reinstalled later has to pull its image again.
+
+### Container updates
+
+`GET /api/docker/updates` reports which containers have an image update available. It reads Unraid's own update cache, `/var/lib/docker/unraid-update-status.json`, which the Docker tab's Check for Updates and the scheduled update check (`/usr/local/emhttp/plugins/dynamix.docker.manager/scripts/dockerupdate check`) write. It never contacts a registry or pulls an image, so the answer is only as fresh as the cache:
+
+```json
+{
+  "cache": { "path": "/var/lib/docker/unraid-update-status.json", "exists": true, "modifiedAt": "2026-10-17T06:00:00.000Z", "ageSeconds": 21600, "entries": 38 },
+  "containers": [
+    {
+      "name": "plex",
+      "id": "0b8d...",
+      "image": "lscr.io/linuxserver/plex",
+      "cacheKey": "lscr.io/linuxserver/plex:latest",
+      "state": "running",
+      "updateAvailable": true,
+      "localDigest": "sha256:1111...",
+      "remoteDigest": "sha256:2222...",
+      "cacheStatus": "false"
+    }
+  ],
+  "totals": { "containers": 24, "updatesAvailable": 3, "upToDate": 19, "unknown": 2 }
+}
+```
+
+Each container is looked up under the key Unraid uses, its image with `library/` added to an official image and `:latest` to an untagged one. `updateAvailable` is `true` when the cached local and remote digests differ, `false` when they match, and `"unknown"` when the entry is missing, has no remote digest or has status `undef` (for example a registry Unraid could not reach). A missing, unreadable or malformed cache file is reported in `cache.error` and makes every container `"unknown"`. To refresh the cache, use Check for Updates on the Docker tab; that script also refreshes templates and may send update notifications, so UnraidClaw does not run it. To apply an update, use `POST /api/ca/app/:name/update` or a container edit with `"pull": true`.
 
 ### VM actions
 
@@ -493,7 +569,7 @@ The transport uses stateless JSON responses without SSE or sessions. It supports
 | OPTIONS | `/mcp` | HTTP 204 when enabled and Origin is allowed; no key required |
 | Any | `/mcp` | HTTP 404 when disabled |
 
-The endpoint exposes the same 68 tools as the OpenClaw plugin, without OpenClaw's `server` argument. Read-only tools carry `readOnlyHint`; every other tool carries `destructiveHint`. Each call runs through the gateway's own `/api/` route in process, so the permission matrix, body validation, dry-run rules and blockers apply unchanged. OpenClaw keeps using `/api/*` whether MCP is on or off.
+The endpoint exposes the same 71 tools as the OpenClaw plugin, without OpenClaw's `server` argument. Read-only tools carry `readOnlyHint`; every other tool carries `destructiveHint`. Each call runs through the gateway's own `/api/` route in process, so the permission matrix, body validation, dry-run rules and blockers apply unchanged. OpenClaw keeps using `/api/*` whether MCP is on or off.
 
 ### Activity log
 
@@ -521,7 +597,7 @@ What this means for clients:
 
 ## OpenClaw plugin
 
-The [OpenClaw](https://github.com/openclaw/openclaw) plugin exposes all 68 tools to any AI agent that supports the OpenClaw protocol.
+The [OpenClaw](https://github.com/openclaw/openclaw) plugin exposes all 71 tools to any AI agent that supports the OpenClaw protocol.
 
 ### Install
 
@@ -621,7 +697,7 @@ The secret then lives in your environment (shell, systemd `EnvironmentFile`, or 
 | Category | Tools |
 |----------|-------|
 | Health | `unraid_health_check` |
-| Docker | `unraid_docker_list`, `unraid_docker_inspect`, `unraid_docker_logs`, `unraid_docker_create`, `unraid_docker_start`, `unraid_docker_stop`, `unraid_docker_restart`, `unraid_docker_pause`, `unraid_docker_unpause`, `unraid_docker_remove` |
+| Docker | `unraid_docker_list`, `unraid_docker_inspect`, `unraid_docker_logs`, `unraid_docker_create`, `unraid_docker_start`, `unraid_docker_stop`, `unraid_docker_restart`, `unraid_docker_pause`, `unraid_docker_unpause`, `unraid_docker_remove`, `unraid_docker_images`, `unraid_docker_prune_images`, `unraid_docker_update_status` |
 | Community Apps | `unraid_ca_search`, `unraid_ca_app`, `unraid_ca_install`, `unraid_ca_update`, `unraid_ca_remove` |
 | Container Settings | `unraid_template_get`, `unraid_template_edit` |
 | App APIs | `unraid_app_list`, `unraid_app_request` |
@@ -645,7 +721,7 @@ Permissions use a `resource:action` format. Configure them from the WebGUI Permi
 
 | Category | Permissions |
 |----------|------------|
-| Docker | `docker:read`, `docker:create`, `docker:update`, `docker:delete` |
+| Docker | `docker:read` (also image lists and update status), `docker:create`, `docker:update`, `docker:delete` (also image pruning) |
 | Community Apps | `ca:read`, `ca:create`, `ca:update`, `ca:delete` |
 | Container Settings | `template:read`, `template:update` |
 | App APIs | `apps:read`, `apps:update` |

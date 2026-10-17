@@ -18,7 +18,7 @@ import https from "node:https";
 import { requirePermission } from "../permissions.js";
 import { getPermissions } from "../config.js";
 import { CA_NAME_RE } from "../ca-template.js";
-import { redactSecrets } from "../ca-saved-template.js";
+import { replaceSecrets as redactSecrets } from "../ca-saved-template.js";
 import { keyHeaderValue, keySecrets, readAppKeys, type AppKey } from "../app-keys.js";
 
 const execFileAsync = promisify(execFile);
