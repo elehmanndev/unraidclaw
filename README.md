@@ -298,7 +298,7 @@ Remove deletes only the container. Appdata, Docker volumes, the image and the sa
 
 ### Container settings
 
-`GET /api/template/:name` returns an installed container's saved template: its settings (image, network, fixed IP, privileged mode, Extra Parameters, Post Arguments, CPU pinning, memory limit, Tailscale) and every port, path, variable, label and device. Values marked `Mask="true"` come back as `***`.
+`GET /api/template/:name` returns an installed container's saved template: its settings (image, network, fixed IP, privileged mode, Extra Parameters, Post Arguments, CPU pinning, memory limit, Tailscale) and every port, path, variable, label and device. Values marked `Mask="true"` come back as `***`, and so do variables and labels whose name contains `TOKEN`, `SECRET`, `PASSWORD`, `PASS`, `KEY`, `APIKEY`, `AUTH` or `CREDENTIAL` in any case, since templates often leave a token unmasked. The same rule hides values in install and update plans, command previews, edit changes, errors and job results; the container still gets the real value.
 
 `POST /api/template/:name/edit` changes the template and rebuilds the container from it, the way editing it on the Docker tab and clicking **Apply** does. The name is the installed container name from the Docker tab.
 

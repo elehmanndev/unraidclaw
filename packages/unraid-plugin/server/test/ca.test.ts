@@ -1556,6 +1556,32 @@ test("a full install carries Extra Parameters, and settings from the request win
   assert.doesNotMatch(plan.templateXml, /<ExtraParams\/>/);
 });
 
+test("an install plan hides a secret-named variable the template does not mask", async () => {
+  await setPermissions(FULL);
+  const fake = "fake-claim-token-not-real-0000";
+  const { app, templatesDir } = await harness({
+    run: async (file, args) => {
+      if (file === "docker" && args[0] === "network") return { stdout: "bridge\nhost\nnone\nbr0\n", stderr: "" };
+      return { stdout: "", stderr: "" };
+    },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/ca/app/plex/install",
+    payload: {
+      repo: "hotio", full: true, dryRun: true,
+      overrides: { "Host Path for /config": "/mnt/user/appdata/plex", "Host Path for /data": "/mnt/user/media", PLEX_CLAIM_TOKEN: fake },
+      settings: { Network: "br0", MyIP: "192.0.2.50" },
+    },
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  assert.ok(!res.body.includes(fake), "neither the env, the command preview nor the template XML echo the token");
+  const { plan } = res.json().data;
+  assert.ok(plan.env.includes("PLEX_CLAIM_TOKEN=***"), JSON.stringify(plan.env));
+  assert.ok(plan.dockerCommandPreview.includes("PLEX_CLAIM_TOKEN=***"));
+  assert.deepEqual(await readdir(templatesDir), [], "a dry run writes nothing");
+});
+
 test("a full install refuses a network that does not exist", async () => {
   await setPermissions(FULL);
   const { app, templatesDir } = await harness({

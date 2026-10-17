@@ -23,7 +23,7 @@ import type {
   TemplateSettingKey,
   TemplateView,
 } from "@unraidclaw/shared";
-import { CaInstallError, isSpecificDevice } from "./ca-template.js";
+import { CaInstallError, isSecretEntry, isSpecificDevice } from "./ca-template.js";
 import { ATTR_PREFIX, XmlParseError, asArray, attrOf, parseXmlDocument, textOf } from "./xml.js";
 
 /** Elements an edit may set. Kept in the order Unraid's postToXML writes them. */
@@ -362,7 +362,7 @@ export function applyTemplateEdit(xml: string, path: string, edit: TemplateEditR
   }
 
   let configs = asArray(root.Config as unknown) as XmlNode[];
-  const masked = (node: unknown, value: string) => (attrOf(node, "Mask") === "true" && value !== "" ? "***" : value);
+  const masked = (node: unknown, value: string) => (nodeIsSecret(node) && value !== "" ? "***" : value);
 
   for (const [i, e] of (edit.config ?? []).entries()) {
     const ref = { type: e.type, target: e.target, mode: e.mode, value: e.type === "Device" ? (e.replaces ?? e.value) : undefined };
@@ -398,7 +398,7 @@ export function applyTemplateEdit(xml: string, path: string, edit: TemplateEditR
       changes.push({
         field: describeEntry(e.type, attrs.Target, mode, e.value),
         before: "",
-        after: e.mask ? (e.value === "" ? "" : "***") : e.value,
+        after: isSecretEntry({ type: e.type, target: attrs.Target, name: attrs.Name, mask: e.mask === true }) && e.value !== "" ? "***" : e.value,
       });
       continue;
     }
@@ -471,7 +471,12 @@ export function applyTemplateEdit(xml: string, path: string, edit: TemplateEditR
 
 // ── Viewing ─────────────────────────────────────────────────────
 
-/** A template as the Docker tab shows it, with masked values hidden. */
+/** Masked, or a variable or label under a secret-looking name such as TUNNEL_TOKEN. */
+function nodeIsSecret(node: unknown): boolean {
+  return isSecretEntry({ type: attrOf(node, "Type"), target: attrOf(node, "Target"), name: attrOf(node, "Name"), mask: attrOf(node, "Mask") === "true" });
+}
+
+/** A template as the Docker tab shows it, with masked and secret-named values hidden. */
 export function templateView(xml: string, path: string): TemplateView {
   const { root } = readTree(xml, path);
   const settings: TemplateView["settings"] = {};
@@ -480,14 +485,15 @@ export function templateView(xml: string, path: string): TemplateView {
   }
   const config: TemplateConfigView[] = (asArray(root.Config as unknown) as XmlNode[]).map((node) => {
     const mask = attrOf(node, "Mask") === "true";
+    const hidden = nodeIsSecret(node);
     const value = configValue(node);
     return {
       name: attrOf(node, "Name"),
       target: attrOf(node, "Target"),
       type: attrOf(node, "Type"),
       mode: configMode(node),
-      value: mask && value !== "" ? "***" : value,
-      default: mask ? "" : attrOf(node, "Default"),
+      value: hidden && value !== "" ? "***" : value,
+      default: hidden ? "" : attrOf(node, "Default"),
       description: attrOf(node, "Description"),
       display: attrOf(node, "Display"),
       required: attrOf(node, "Required") === "true",

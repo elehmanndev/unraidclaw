@@ -28,7 +28,9 @@ import {
   missingRequired,
   overrideKey,
   resolveOverrides,
+  redactText,
   resolveTemplate,
+  secretValues,
   validateResolved,
   type TemplateEnv,
 } from "../ca-template.js";
@@ -835,7 +837,7 @@ export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = crea
           reply,
           500,
           "CA_INSTALL_FAILED",
-          `Unraid could not create the container: ${(err as Error).message}. The template was kept at ${templatePath}, so you can retry or finish the install from the Docker tab.`
+          `Unraid could not create the container: ${redactText(secretValues(resolved.config), (err as Error).message)}. The template was kept at ${templatePath}, so you can retry or finish the install from the Docker tab.`
         );
       }
 
@@ -869,7 +871,7 @@ export function registerCaRoutes(app: FastifyInstance, runtime: CaRuntime = crea
           await runtime.run("docker", ["start", containerName]);
         } catch (err) {
           warnings.push(
-            `The container was created but could not be started: ${(err as Error).message}. Start it from the Docker tab.`
+            `The container was created but could not be started: ${redactText(secretValues(resolved.config), (err as Error).message)}. Start it from the Docker tab.`
           );
         }
       }

@@ -1257,6 +1257,45 @@ test("a masked value reaches docker but never the response", async () => {
   assert.ok(docker.runs.find((r) => r[1] === "create")!.includes("API_KEY=hunter2-very-secret"));
 });
 
+// Templates often leave Mask="false" on a token. The name alone must hide it.
+const FAKE_TOKEN = "fake-tunnel-token-not-real-0000";
+const WITH_UNMASKED_TOKEN = templateXml({
+  name: "jellyfin",
+  image: "jellyfin/jellyfin:latest",
+  configs: [
+    { label: "Config", target: "/config", type: "Path", mode: "rw", value: "/mnt/user/appdata/jellyfin-custom" },
+    { label: "Tunnel token", target: "TUNNEL_TOKEN", type: "Variable", value: FAKE_TOKEN, mask: false },
+    { label: "Auth enabled", target: "AUTH_ENABLED", type: "Variable", value: "true", mask: false },
+    { label: "PUID", target: "PUID", type: "Variable", value: "1000" },
+  ],
+});
+
+test("a secret-named variable is hidden from an update plan even when Mask is false", async () => {
+  await setPermissions(ALL_CA);
+  const docker = runningJellyfin();
+  const { app } = await harness(docker, { "my-jellyfin.xml": WITH_UNMASKED_TOKEN });
+
+  const preview = await post(app, "/api/ca/app/jellyfin/update", { dryRun: true });
+  assert.equal(preview.statusCode, 200);
+  assert.ok(!preview.payload.includes(FAKE_TOKEN), "the dry run does not echo the token");
+  const { plan } = preview.json().data;
+  assert.ok(plan.env.includes("TUNNEL_TOKEN=***"));
+  assert.ok(plan.env.includes("AUTH_ENABLED=***"));
+  assert.ok(plan.env.includes("PUID=1000"), "ordinary values stay readable");
+  assert.ok(plan.dockerCommand.includes("TUNNEL_TOKEN=***"));
+
+  docker.failures.create = `invalid argument: docker create -e TUNNEL_TOKEN=${FAKE_TOKEN} jellyfin/jellyfin:latest`;
+  const failed = await post(app, "/api/ca/app/jellyfin/update");
+  assert.equal(failed.statusCode, 500);
+  assert.ok(!failed.payload.includes(FAKE_TOKEN), "the error does not echo the token");
+  delete docker.failures.create;
+
+  const done = await post(app, "/api/ca/app/jellyfin/update");
+  assert.equal(done.statusCode, 200);
+  assert.ok(!done.payload.includes(FAKE_TOKEN), "the result does not echo the token");
+  assert.ok(docker.runs.find((r) => r[1] === "create")!.includes(`TUNNEL_TOKEN=${FAKE_TOKEN}`), "docker still gets the real value");
+});
+
 test("a docker error quoting the command does not leak a masked value", async () => {
   await setPermissions(ALL_CA);
   const docker = runningJellyfin();
