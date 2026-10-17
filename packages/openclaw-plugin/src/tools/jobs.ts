@@ -10,6 +10,7 @@ const JOB_TOOLS = [
   "unraid_compose_edit",
   "unraid_plugin_install",
   "unraid_plugin_update",
+  "unraid_docker_prune_images",
 ];
 const server = { type: "string", description: "Target server name (optional, uses default server)" };
 
@@ -17,7 +18,7 @@ export function registerJobTools(api: any, getClient: ClientResolver): void {
   api.registerTool({
     name: "unraid_job_start",
     description:
-      "Run a long operation in the background instead of waiting for it: an app install or update, a container edit, a compose pull, redeploy or edit, or a plugin install or update. Pass the tool's name and the arguments you would give it directly. The job's ID comes back at once; check it with unraid_job_get. When the job finishes, the user gets an Unraid notification, which reaches their phone if Unraid's notifications are set up to. The tool's own permission still applies. Use it for anything that pulls an image or rebuilds a container, especially from a phone, and run the tool directly with dryRun=true first when it has one.",
+      "Run a long operation in the background instead of waiting for it: an app install or update, a container edit, a compose pull, redeploy or edit, a plugin install or update, or an image prune. Pass the tool's name and the arguments you would give it directly. The job's ID comes back at once; check it with unraid_job_get. When the job finishes, the user gets an Unraid notification, which reaches their phone if Unraid's notifications are set up to. The tool's own permission still applies. Use it for anything that pulls an image or rebuilds a container, especially from a phone, and run the tool directly with dryRun=true first when it has one.",
     parameters: {
       type: "object",
       properties: {

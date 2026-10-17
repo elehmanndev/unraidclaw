@@ -7,7 +7,8 @@
 // the submitter's API key, so the route's own permission check, validation,
 // dry-run rules and activity logging apply exactly as they would to a direct
 // call. Only tools that can take minutes are accepted: image pulls, installs,
-// rebuilds and redeploys. Anything else is quick enough to call directly.
+// rebuilds, redeploys and image pruning. Anything else is quick enough to call
+// directly.
 //
 // Jobs live in memory. A service restart forgets them, and the key a queued job
 // holds is never written anywhere.
@@ -20,7 +21,7 @@ import type { ApiResponse, JobDetail, JobStartRequest, JobStatus, JobSummary } f
 import { registerTools, isErrorResult, type ToolClient, type ToolDefinition } from "unraidclaw/tools";
 import { requirePermission } from "../permissions.js";
 
-/** Tools a job may run: the ones that pull images, install, rebuild or redeploy. */
+/** Tools a job may run: the ones that pull images, install, rebuild, redeploy or prune images. */
 export const JOB_TOOLS: readonly string[] = [
   "unraid_ca_install",
   "unraid_ca_update",
@@ -29,6 +30,7 @@ export const JOB_TOOLS: readonly string[] = [
   "unraid_compose_edit",
   "unraid_plugin_install",
   "unraid_plugin_update",
+  "unraid_docker_prune_images",
 ];
 
 /** Arguments that name what a job acts on, in the order they are looked for. */
