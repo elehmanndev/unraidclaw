@@ -6,6 +6,10 @@ The `.plg` changelog stays the short list the Unraid WebGUI shows. The notes fil
 
 Preview the result with `bash packages/unraid-plugin/scripts/release-notes.sh <version>`.
 
+## Versions
+
+Unraid compares plugin versions as text, not as numbers, so `0.2.10` sorts before `0.2.9` and a server on `0.2.9` is never offered `0.2.10`. Keep every part of a version a single digit: after `x.y.9` comes `x.(y+1).0`, and after `x.9.9` comes `(x+1).0.0`.
+
 ## Layout
 
 Use these sections in this order, and leave out any that would be empty. See `0.1.33.md` for a complete example.
