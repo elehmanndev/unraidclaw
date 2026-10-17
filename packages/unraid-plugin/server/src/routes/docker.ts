@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { Resource, Action } from "@unraidclaw/shared";
+import { Resource, Action, isPermitted } from "@unraidclaw/shared";
 import type { DockerContainer, DockerLogsResponse } from "@unraidclaw/shared";
 import type { GraphQLClient } from "../graphql-client.js";
 import { requirePermission } from "../permissions.js";
+import { getPermissions } from "../config.js";
 import { writeFile, mkdir } from "node:fs/promises";
 import { isIP } from "node:net";
 import {
@@ -234,6 +235,18 @@ export function registerDockerRoutes(app: FastifyInstance, gql: GraphQLClient, o
         || (body.privileged !== undefined && typeof body.privileged !== "boolean")
         || (body.labels !== undefined && (!validBody(body.labels, Object.keys(body.labels ?? {})) || Object.entries(body.labels).some(([key, value]) => !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,254}$/.test(key) || typeof value !== "string")))) {
         return reply.status(400).send({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid container fields or types" } });
+      }
+      // Privileged mode, host devices and Extra Parameters each give the
+      // container host access (Extra Parameters can mount / or share the host
+      // PID namespace), so they need the Edit & Rebuild permission a full CA
+      // install needs for the same settings, not only docker:create.
+      const hostAccess = [
+        body.privileged === true ? "privileged" : "",
+        (body.devices?.length ?? 0) > 0 ? "devices" : "",
+        body.extraArgs !== undefined ? "extraArgs" : "",
+      ].filter(Boolean);
+      if (hostAccess.length > 0 && !isPermitted(getPermissions(), Resource.TEMPLATE, Action.UPDATE)) {
+        return reply.status(403).send({ ok: false, error: { code: "FORBIDDEN", message: `Permission denied: ${Resource.TEMPLATE}:${Action.UPDATE} (${hostAccess.join(", ")} needs it as well as ${Resource.DOCKER}:${Action.CREATE})` } });
       }
       const {
         image,

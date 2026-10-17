@@ -16,7 +16,7 @@ const { registerVMRoutes } = await import("../src/routes/vms.js");
 const { registerShareRoutes } = await import("../src/routes/shares.js");
 const { registerNotificationRoutes } = await import("../src/routes/notifications.js");
 await writeFile(join(root, "permissions.json"), JSON.stringify(Object.fromEntries(
-  ["array", "docker", "vms", "share", "notification"].flatMap((r) => ["read", "create", "update", "delete"].map((a) => [`${r}:${a}`, true])))));
+  [...["array", "docker", "vms", "share", "notification"].flatMap((r) => ["read", "create", "update", "delete"].map((a) => [`${r}:${a}`, true])), ["template:update", true]])));
 loadPermissions();
 after(() => rm(root, { recursive: true, force: true }));
 function recorder(output: (args: string[]) => string = () => "") {
@@ -171,6 +171,24 @@ test("docker create passes Unraid's advanced settings to docker run in Unraid's 
   assert.equal((await app.inject({ method: "POST", url: "/api/docker/containers", payload: { image: "alpine", name: "gpu-app", network: "br0", staticIp: "fd00::50" } })).statusCode, 200);
   assert.ok(runner.calls[0].args.join(" ").includes("--ip6 fd00::50"));
   assert.match(await readFile(join(dir, "my-gpu-app.xml"), "utf8"), /<MyIP>fd00::50<\/MyIP>[\s\S]*<Privileged>false<\/Privileged>[\s\S]*<ExtraParams><\/ExtraParams>[\s\S]*<PostArgs><\/PostArgs>[\s\S]*<CPUset><\/CPUset>/);
+});
+test("docker create needs Edit & Rebuild for privileged mode, host devices and Extra Parameters", async (t) => {
+  const dir = await mkdtemp(join(root, "templates-gate-")); const app = Fastify();
+  const granted = JSON.parse(await readFile(join(root, "permissions.json"), "utf8"));
+  await writeFile(join(root, "permissions.json"), JSON.stringify({ ...granted, "template:update": false })); loadPermissions();
+  t.after(async () => { await app.close(); await writeFile(join(root, "permissions.json"), JSON.stringify(granted)); loadPermissions(); });
+  const runner = recorder((args) => args[0] === "run" ? "abcdef" : JSON.stringify([{ Id: "abcdef", Name: "/plain", Config: { Image: "alpine" }, State: { Status: "running" } }]));
+  registerDockerRoutes(app, graphql(), { run: runner.run, templatesDir: dir, mkdir: (async () => {}) as typeof mkdir });
+  for (const extra of [{ privileged: true }, { devices: ["/dev/dri"] }, { extraArgs: "--volume=/:/host" }, { extraArgs: "--pid=host" }]) {
+    const res = await app.inject({ method: "POST", url: "/api/docker/containers", payload: { image: "alpine", ...extra } });
+    assert.equal(res.statusCode, 403, JSON.stringify(extra));
+    assert.match(res.json().error.message, /template:update/);
+  }
+  assert.equal(runner.calls.length, 0);
+  // The settings that give no host access still need only docker:create.
+  const res = await app.inject({ method: "POST", url: "/api/docker/containers",
+    payload: { image: "alpine", name: "plain", privileged: false, devices: [], network: "br0", staticIp: "192.168.2.51", cpuset: "0-1", postArgs: "--verbose" } });
+  assert.equal(res.json().data.verified, true, res.body);
 });
 const uuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 test("VM actions return identity and verify state with bounded asynchronous polling", async (t) => {

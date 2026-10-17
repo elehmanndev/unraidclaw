@@ -142,7 +142,7 @@ REST authentication uses the `x-api-key: <api-key>` header. `/api/health` is pub
 | **Docker** | GET | `/api/docker/containers` | `docker:read` |
 | | GET | `/api/docker/containers/:id` | `docker:read` |
 | | GET | `/api/docker/containers/:id/logs` | `docker:read` |
-| | POST | `/api/docker/containers` | `docker:create` |
+| | POST | `/api/docker/containers` | `docker:create`, plus `template:update` for `privileged`, `devices` or `extraArgs` |
 | | POST | `/api/docker/containers/:id/:action` | `docker:update` |
 | | DELETE | `/api/docker/containers/:id` | `docker:delete` |
 | **Community Apps** | GET | `/api/ca/search?q=` | `ca:read` |
@@ -224,7 +224,7 @@ REST authentication uses the `x-api-key: <api-key>` header. `/api/health` is pub
 }
 ```
 
-Only `image` is required. The container is started immediately and an Unraid dockerMan XML template is created so it appears in the Docker tab.
+Only `image` is required. The container is started immediately and an Unraid dockerMan XML template is created so it appears in the Docker tab. Three of the advanced fields below give the container host access: `privileged`, `devices` and `extraArgs`, which can mount `/` or join the host PID namespace. A request using any of them needs `template:update` as well as `docker:create`, the same as a full install, and is answered 403 without it.
 
 The last six fields are the advanced settings of Unraid's own container form, and each is saved to the same template field, so the Docker tab shows them and rebuilds the container the same way:
 
