@@ -238,6 +238,8 @@ The last six fields are the advanced settings of Unraid's own container form, an
 - `cpuset` pins the container to CPUs, as `--cpuset-cpus` reads it, for example `0-3,8`.
 - `devices` passes host devices through, as `--device` reads them: `/dev/dri`, or `/dev/ttyUSB0:/dev/ttyUSB0:rwm`.
 
+`privileged: true`, any `devices` and a non-empty `extraArgs` can each give the container root on the host, so a request with any of them also needs `template:update`, the same as a full Community Applications install, and is refused with `403` without it. `staticIp`, `cpuset` and `postArgs` need only `docker:create`.
+
 Unraid passes Extra Parameters and Post Arguments to the shell unescaped whenever a container is rebuilt from its template, so both accept only letters, digits, `: . , / + = _ -` and single spaces between tokens. Quotes, other whitespace and shell metacharacters are rejected with `400` before docker runs. Every value reaches docker through an argument list, never a shell. A container created with any of these settings in effect is refused by `POST /api/ca/app/:name/update`, which rebuilds only settings it can reproduce exactly. Update it from the Docker tab instead.
 
 ### Community Applications

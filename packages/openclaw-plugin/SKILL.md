@@ -46,6 +46,7 @@ Both take `dryRun: true`. Use it first for a removal, and read the result back t
 
 `unraid_docker_create` takes `image` plus optional `name`, `ports`, `volumes`, `env`, `restart` and `network`. Six more fields match the advanced settings of Unraid's container form and are saved to the container's template, so the Docker tab shows them:
 
+- `privileged`, `devices` and `extraArgs` also need the `template:update` permission; without it the request is refused with 403. Ask the owner to grant it rather than working around it.
 - `extraArgs` is Extra Parameters: docker run options, space separated, such as `--gpus all`, `--cap-add=SYS_ADMIN`, `--memory=8g` or `--hostname=media`. Put the network in `network`, not here.
 - `postArgs` is Post Arguments: the command appended after the image, such as `--config /config/app.yml`.
 - `staticIp` is a fixed IPv4 or IPv6 address. Docker only accepts it on a macvlan, ipvlan or custom bridge network, so pass `network` too; it is rejected on bridge, host and none.
