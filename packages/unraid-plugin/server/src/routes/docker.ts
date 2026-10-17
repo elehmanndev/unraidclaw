@@ -1,8 +1,9 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { Resource, Action } from "@unraidclaw/shared";
+import { Resource, Action, isPermitted } from "@unraidclaw/shared";
 import type { DockerContainer, DockerLogsResponse } from "@unraidclaw/shared";
 import type { GraphQLClient } from "../graphql-client.js";
 import { requirePermission } from "../permissions.js";
+import { getPermissions } from "../config.js";
 import { writeFile, mkdir } from "node:fs/promises";
 import { isIP } from "node:net";
 import {
@@ -375,6 +376,15 @@ export function registerDockerRoutes(app: FastifyInstance, gql: GraphQLClient, o
       const postTokens = postArgs === undefined ? [] : splitArgs(postArgs);
       if (postTokens === null) {
         return reply.status(400).send({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid postArgs (expected command arguments separated by single spaces, using only letters, digits and : . , / + = _ -)" } });
+      }
+
+      // Privileged mode, host devices and Extra Parameters can each give a
+      // container root on the host, which is what template:update guards on an
+      // installed app and what a full CA install needs it for. Creating a
+      // container with them must not be the easier way to get them.
+      if ((privileged || extraTokens.length > 0 || devices.length > 0)
+        && !isPermitted(getPermissions(), Resource.TEMPLATE, Action.UPDATE)) {
+        return reply.status(403).send({ ok: false, error: { code: "FORBIDDEN", message: `Permission denied: ${Resource.TEMPLATE}:${Action.UPDATE} (privileged, devices and extraArgs need it as well as ${Resource.DOCKER}:${Action.CREATE})` } });
       }
 
       const containerName = name ?? image.split("/").pop()?.split(":")[0] ?? "container";

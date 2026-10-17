@@ -190,7 +190,7 @@ export function registerDockerTools(api: any, getClient: ClientResolver): void {
   api.registerTool({
     name: "unraid_docker_create",
     description:
-      "Create and start a new Docker container on the Unraid server. Specify image, optional name, port mappings, volume mounts, environment variables, restart policy, network, and Unraid's advanced settings: extra docker run options, post arguments, a fixed IP on a custom network, privileged mode, CPU pinning and host devices.",
+      "Create and start a new Docker container on the Unraid server. Specify image, optional name, port mappings, volume mounts, environment variables, restart policy, network, and Unraid's advanced settings: extra docker run options, post arguments, a fixed IP on a custom network, privileged mode, CPU pinning and host devices. Privileged mode, host devices and extra docker run options also need the template:update permission.",
     parameters: {
       type: "object",
       properties: {

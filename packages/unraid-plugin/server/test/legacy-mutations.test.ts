@@ -28,6 +28,14 @@ function recorder(output: (args: string[]) => string = () => "") {
   };
   return { calls, run };
 }
+/** Grant template:update for one test, as the advanced create settings need it. */
+async function grantTemplateUpdate(t: { after: (fn: () => unknown) => void }) {
+  const file = join(root, "permissions.json");
+  const before = await readFile(file, "utf8");
+  await writeFile(file, JSON.stringify({ ...JSON.parse(before), "template:update": true }));
+  loadPermissions();
+  t.after(async () => { await writeFile(file, before); loadPermissions(); });
+}
 function graphql(output: () => unknown = () => { throw new Error("Unexpected GraphQL call"); }) {
   return { query: async () => output() } as GraphQLClient;
 }
@@ -145,8 +153,30 @@ test("docker create rejects wrong types, labels and traversal before mkdir", asy
   ]) assert.equal((await app.inject({ method: "POST", url: "/api/docker/containers", payload })).statusCode, 400, JSON.stringify(payload));
   assert.equal(runner.calls.length, 0);
 });
+test("docker create needs template:update for privileged, devices and extraArgs", async (t) => {
+  const dir = await mkdtemp(join(root, "templates-gate-")); const app = Fastify(); t.after(() => app.close());
+  const runner = recorder((args) => args[0] === "run" ? "abcdef" : JSON.stringify([{ Id: "abcdef", Name: "/plain", Config: { Image: "alpine" }, State: { Status: "running" } }]));
+  registerDockerRoutes(app, graphql(), { run: runner.run, templatesDir: dir, mkdir: (async () => {}) as typeof mkdir });
+  for (const payload of [
+    { image: "alpine", privileged: true },
+    { image: "alpine", devices: ["/dev/sda"] },
+    { image: "alpine", extraArgs: "--pid=host" },
+    { image: "alpine", extraArgs: "--cap-add=ALL --security-opt=apparmor=unconfined" },
+  ]) {
+    const res = await app.inject({ method: "POST", url: "/api/docker/containers", payload });
+    assert.equal(res.statusCode, 403, JSON.stringify(payload));
+    assert.match(res.json().error.message, /template:update/);
+  }
+  assert.equal(runner.calls.length, 0);
+  // Settings that cannot reach the host stay available with docker:create alone.
+  for (const payload of [
+    { image: "alpine", name: "plain", privileged: false, devices: [] },
+    { image: "alpine", name: "plain", network: "br0", staticIp: "192.168.2.51", cpuset: "0-1", postArgs: "--verbose" },
+  ]) assert.equal((await app.inject({ method: "POST", url: "/api/docker/containers", payload })).statusCode, 200, JSON.stringify(payload));
+});
 test("docker create passes Unraid's advanced settings to docker run in Unraid's order and records them in the template", async (t) => {
   const dir = await mkdtemp(join(root, "templates-advanced-")); const app = Fastify(); t.after(() => app.close());
+  await grantTemplateUpdate(t);
   const runner = recorder((args) => args[0] === "run" ? "abcdef" : JSON.stringify([{ Id: "abcdef", Name: "/gpu-app", Config: { Image: "alpine" }, State: { Status: "running" } }]));
   registerDockerRoutes(app, graphql(), { run: runner.run, templatesDir: dir, mkdir: (async () => {}) as typeof mkdir });
   const payload = {
