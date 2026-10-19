@@ -1,0 +1,5 @@
+{
+  "worktree": {
+    "setup": "COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile"
+  }
+}
