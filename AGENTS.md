@@ -6,7 +6,7 @@ The rest of this page is for the agent. [CONTRIBUTING.md](CONTRIBUTING.md) holds
 
 ## Ground rules
 
-- **Never run a mutating operation against a real Unraid server.** No installs, updates, or removals of containers or plugins, no service restarts, no reboots. The tests inject a fake command runner and a fixture filesystem precisely so nothing has to touch a live host. When a real host is unavoidable, ask a human to run it.
+- **Never run a mutating operation against a real Unraid server without the owner's explicit consent.** No installs, updates, or removals of containers or plugins, no service restarts, no reboots unless the owner has approved that specific change. The tests inject a fake command runner and a fixture filesystem precisely so nothing has to touch a live host.
 - **Do not bump the version anywhere, do not tag, do not edit the `md5` entity in `packages/unraid-plugin/unraidclaw.plg`, and do not publish to npm or ClawHub.** Releases are one commit by the maintainer through the release workflow.
 - **No credentials in code, tests, fixtures, logs, or commit messages.** Not even an example that looks real.
 - **Commit messages say what changed and why**, in plain sentences, prefixed by area (`feat:`, `fix:`, `docs:`, `chore:`). No attribution trailers, no tool names, no references to reviews.
