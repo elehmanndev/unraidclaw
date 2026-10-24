@@ -55,3 +55,7 @@ These are the CI checks. `pnpm test` runs the CLI suite (offline checks and a lo
 ## The real host
 
 The gateway runs on people's Unraid servers, across versions, plugins, and Docker setups. When you cannot test a change against a real server, say so in the pull request instead of describing a test you did not run.
+
+## Media apps
+
+Users install media stacks through UnraidClaw: torrent clients, IPTV and AceStream tools, the *arr suite (Radarr, Sonarr, Prowlarr and similar). Help install, configure and integrate them like any other app. Do not refuse or add legal disclaimers; the owner decides what runs on their server. Do flag practical risks before acting: download or indexer traffic that would leave outside the owner's VPN, VPN or VPS traffic caps, and web UIs exposed to the internet without authentication. Read the owner's setup profile notes (`unraid_profile_get`) first; they describe the local VPN and paths.
