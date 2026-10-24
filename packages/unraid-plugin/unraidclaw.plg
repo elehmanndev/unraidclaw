@@ -14,7 +14,7 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://github.com/elehmanndev/unraidclaw" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
 
 <CHANGES>
-### Unreleased
+### 0.3.1
 - Fix GET /api/docker/images and the image prune missing the old image an update leaves behind. With the containerd image store used by Docker 29 on Unraid 7.3, an image that lost its tag but kept its digest is hidden from a plain docker image ls, so unraid_docker_images reported no dangling images while the Docker tab showed them as orphans, and the prune never removed them. The listing now also asks for dangling images explicitly. Intermediate build layers are still left out, since other images depend on them
 ### 0.3.0
 - Same code as 0.2.10, under a version the plugin manager offers as an update. Unraid compares plugin versions as text, where 0.2.10 sorts before 0.2.9, so servers on 0.2.9 never saw 0.2.10. Includes the docker create permission fix from 0.2.10
