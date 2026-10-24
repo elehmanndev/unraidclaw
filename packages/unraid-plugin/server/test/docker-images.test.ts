@@ -28,7 +28,8 @@ const ALL = { "docker:read": true, "docker:delete": true };
 const sha = (c: string) => `sha256:${c.repeat(64)}`;
 const cid = (c: string) => c.repeat(64);
 
-interface FakeImage { id: string; tags: string[]; size: number; created: string }
+/** hidden: an untagged image only the dangling filter lists, as the containerd store does after an update pull. */
+interface FakeImage { id: string; tags: string[]; size: number; created: string; hidden?: boolean }
 interface FakeContainer { id: string; name: string; imageId: string; image: string; state: string }
 
 /** A fake docker CLI: images and containers in memory, every call recorded. */
@@ -39,7 +40,10 @@ function fakeDocker(images: FakeImage[], containers: FakeContainer[], opts: { rm
     assert.ok(options.timeout > 0 && options.timeout <= 120000, "every command is bounded");
     calls.push(args);
     const out = (s: string) => ({ stdout: s, stderr: "" });
-    if (args[0] === "image" && args[1] === "ls") return out(images.map((i) => `${i.id}\n`).join(""));
+    if (args[0] === "image" && args[1] === "ls") {
+      const danglingOnly = args.includes("dangling=true");
+      return out(images.filter((i) => danglingOnly ? i.tags.length === 0 : !i.hidden).map((i) => `${i.id}\n`).join(""));
+    }
     if (args[0] === "ps") return out(containers.map((c) => `${c.id}\n`).join(""));
     if (args[0] === "image" && args[1] === "inspect") {
       const ids = args.slice(args.indexOf("--") + 1);
@@ -289,4 +293,25 @@ test("the image tools call the routes they document and the prune tool re-checks
     assert.match(out.content[0].text, /Error|must|Unknown/i, JSON.stringify(bad));
   }
   assert.equal(calls.length, 3, "refused parameters never reach HTTP");
+});
+
+test("an untagged image a plain listing hides is still listed and pruned", async (t) => {
+  await setPermissions(ALL);
+  const images: FakeImage[] = [
+    { id: sha("a"), tags: ["decolua/9router:latest"], size: 300, created: "2026-10-23T00:00:00Z" },
+    { id: sha("b"), tags: [], size: 280, created: "2026-10-01T00:00:00Z", hidden: true },
+  ];
+  const containers: FakeContainer[] = [
+    { id: cid("1"), name: "9router", imageId: sha("a"), image: "decolua/9router", state: "running" },
+  ];
+  const app = await harness(fakeDocker(images, containers)); t.after(() => app.close());
+  const list = await app.inject({ method: "GET", url: "/api/docker/images" });
+  assert.equal(list.statusCode, 200, list.body);
+  assert.equal(list.json().data.totals.danglingCount, 1);
+  const res = await app.inject({ method: "POST", url: "/api/docker/images/prune", payload: { dryRun: false } });
+  assert.equal(res.statusCode, 200, res.body);
+  const data = res.json().data;
+  assert.deepEqual(data.removed.map((i: { id: string }) => i.id), [sha("b")]);
+  assert.equal(data.verified, true);
+  assert.deepEqual(images.map((i) => i.id), [sha("a")]);
 });
