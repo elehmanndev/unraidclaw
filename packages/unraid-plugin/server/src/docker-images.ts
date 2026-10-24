@@ -105,8 +105,17 @@ export async function listContainerRefs(run: CommandRunner): Promise<ContainerRe
 }
 
 async function listImageRows(run: CommandRunner): Promise<ImageRow[]> {
-  const { stdout } = await run("docker", ["image", "ls", "-q", "--no-trunc"], { timeout: LIST_TIMEOUT_MS, maxBuffer: MAX_BUFFER });
-  const ids = [...new Set(lines(stdout))].filter((id) => IMAGE_ID_RE.test(id));
+  // With the containerd image store (Docker 29 on Unraid 7.3), an image that
+  // lost its tag but kept its digest, which is what an update pull leaves
+  // behind, is hidden from a plain listing yet shown by the dangling filter.
+  // `-a` is not used instead: with the classic store it adds intermediate build
+  // layers that other images depend on, which docker rmi refuses.
+  const opts = { timeout: LIST_TIMEOUT_MS, maxBuffer: MAX_BUFFER };
+  const [{ stdout: tagged }, { stdout: dangling }] = await Promise.all([
+    run("docker", ["image", "ls", "-q", "--no-trunc"], opts),
+    run("docker", ["image", "ls", "-q", "--no-trunc", "--filter", "dangling=true"], opts),
+  ]);
+  const ids = [...new Set([...lines(tagged), ...lines(dangling)])].filter((id) => IMAGE_ID_RE.test(id));
   const out: ImageRow[] = [];
   for (const batch of chunks(ids, INSPECT_CHUNK)) {
     const { stdout: rows } = await run("docker", [
