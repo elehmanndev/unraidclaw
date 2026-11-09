@@ -169,6 +169,8 @@ interface Resolved {
   /** Port and scheme from the Docker tab's WebUI link, when it has one. */
   webuiPort: number | null;
   webuiHttps: boolean;
+  /** Container port to the IPv4 address and port the host publishes it on. */
+  published: Map<number, { host: string; port: number }>;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -186,6 +188,25 @@ export function resolveContainer(inspect: any): Resolved {
   const webuiPort = m ? Number(m[1]) : null;
   const webuiHttps = /^https:/i.test(webui);
 
+  // Many apps, Sonarr and Radarr among them, only answer to the host names
+  // they know and reject a request addressed to the container's own IP. The
+  // address the owner uses, a port the host publishes, is accepted, so a
+  // published port is preferred. Only IPv4 bindings are used: an unspecified
+  // address is reached on loopback, a specific one as given.
+  const published = new Map<number, { host: string; port: number }>();
+  for (const [key, bindings] of Object.entries(inspect?.NetworkSettings?.Ports ?? {})) {
+    const [num, proto] = key.split("/");
+    if (proto !== "tcp" || !Array.isArray(bindings)) continue;
+    for (const b of bindings) {
+      const hostIp = String(b?.HostIp ?? "");
+      const hostPort = Number(b?.HostPort);
+      if (!Number.isInteger(hostPort) || hostPort < 1 || hostPort > 65535) continue;
+      if (hostIp !== "" && hostIp !== "0.0.0.0" && !/^\d{1,3}(\.\d{1,3}){3}$/.test(hostIp)) continue;
+      published.set(Number(num), { host: hostIp === "" || hostIp === "0.0.0.0" ? "127.0.0.1" : hostIp, port: hostPort });
+      break;
+    }
+  }
+
   const mode = String(inspect?.HostConfig?.NetworkMode ?? "");
   const networks: Record<string, any> = inspect?.NetworkSettings?.Networks ?? {};
   let host: string | null = null;
@@ -201,7 +222,13 @@ export function resolveContainer(inspect: any): Resolved {
     if (ip) host = String(ip);
     else unreachable = "docker reports no IP address for it.";
   }
-  return { name, running, network: mode, host, unreachable, ports, webuiPort, webuiHttps };
+  return { name, running, network: mode, host, unreachable, ports, webuiPort, webuiHttps, published };
+}
+
+/** Where a request to a container port goes: the published host port when there is one, else the container itself. */
+export function addressFor(r: Resolved, port: number): { host: string; port: number } | null {
+  if (r.network === "host") return r.host ? { host: r.host, port } : null;
+  return r.published.get(port) ?? (r.host ? { host: r.host, port } : null);
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -307,12 +334,11 @@ export function registerAppRoutes(app: FastifyInstance, runtime: AppsRuntime = c
         for (const raw of names.length > 0 ? await inspect(names) : []) {
           const r = resolveContainer(raw);
           let baseUrl: string | null = null;
-          if (r.host) {
-            try {
-              baseUrl = `${r.webuiHttps ? "https" : "http"}://${r.host}:${choosePort(r)}`;
-            } catch {
-              baseUrl = null;
-            }
+          try {
+            const to = addressFor(r, choosePort(r));
+            if (to) baseUrl = `${r.webuiHttps ? "https" : "http"}://${to.host}:${to.port}`;
+          } catch {
+            baseUrl = null;
           }
           const key = keys.get(r.name);
           targets.push({ name: r.name, running: r.running, baseUrl, ports: r.ports, key: key ? { type: key.type, header: key.header } : null });
@@ -344,13 +370,16 @@ export function registerAppRoutes(app: FastifyInstance, runtime: AppsRuntime = c
         const target = resolveContainer(raw);
         if (target.name !== name) throw new AppError(`docker reports the container as "${target.name}", not "${name}".`, "APP_MISMATCH", 409);
         if (!target.running) throw new AppError(`"${name}" is not running, so its API cannot answer. Start it first.`, "APP_NOT_RUNNING", 409);
-        if (!target.host) throw new AppError(`"${name}" cannot be reached from the server: ${target.unreachable}`, "APP_UNREACHABLE", 409);
-        const port = choosePort(target, body.port);
+        if (!target.host && target.published.size === 0) {
+          throw new AppError(`"${name}" cannot be reached from the server: ${target.unreachable}`, "APP_UNREACHABLE", 409);
+        }
+        const to = addressFor(target, choosePort(target, body.port));
+        if (!to) throw new AppError(`"${name}" cannot be reached from the server: ${target.unreachable}`, "APP_UNREACHABLE", 409);
         const scheme = (body.https ?? target.webuiHttps) ? "https" : "http";
 
-        const url = new URL(`${scheme}://${target.host}:${port}${body.path}`);
+        const url = new URL(`${scheme}://${to.host}:${to.port}${body.path}`);
         // Belt and braces: whatever the path held, the request goes to the container.
-        if (url.hostname !== target.host && `[${url.hostname}]` !== target.host) {
+        if (url.hostname !== to.host && `[${url.hostname}]` !== to.host) {
           throw new AppError('"path" must not change the host.', "APP_INVALID_BODY", 400);
         }
         for (const [k, v] of Object.entries(body.query ?? {})) url.searchParams.append(k, String(v));
