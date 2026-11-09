@@ -144,7 +144,7 @@ Once installed and configured, ask your agent:
 
 `unraid_template_get` reads an installed container's saved settings, and `unraid_template_edit` changes them and rebuilds the container the way the Docker tab's Apply does: ports, paths, variables, labels, devices, network and fixed IP, privileged mode, Extra Parameters and Tailscale. The rebuilt container must start and stay up, or the original comes back and its template is left unchanged. It changes settings, not the app version. It takes `dryRun`.
 
-`unraid_app_request` sends one request to an installed app's own web API, for changes inside the app such as an Immich album or a proxy host. The server finds the container's address itself and adds the key the user saved on the App Keys tab without ever showing it. `unraid_app_list` shows which apps have a key. Changes take `dryRun`.
+`unraid_app_request` sends one request to an installed app's own web API, for changes inside the app such as an Immich album or a proxy host. The server finds the container's address itself, preferring the port the host publishes so apps that check the host name, such as Sonarr and Radarr, answer, and adds the key the user saved on the App Keys tab without ever showing it. `unraid_app_list` shows which apps have a key. Changes take `dryRun`.
 
 The four compose tools manage Docker Compose stacks. Stacks deployed from a git checkout can only be started, stopped and restarted, since their repository is the source; local stacks can also be edited and redeployed, with a backup and a rollback when a service does not come back. Secrets in compose files are shown as `***` and kept when sent back that way.
 

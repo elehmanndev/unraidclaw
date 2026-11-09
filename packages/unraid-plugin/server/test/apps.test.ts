@@ -17,7 +17,7 @@ const flashBase = await mkdtemp(join(tmpdir(), "unraidclaw-apps-"));
 process.env.FLASH_BASE = flashBase;
 
 const { loadPermissions } = await import("../src/config.js");
-const { registerAppRoutes, createAppsRuntime, resolveContainer } = await import("../src/routes/apps.js");
+const { registerAppRoutes, createAppsRuntime, resolveContainer, addressFor } = await import("../src/routes/apps.js");
 const { parseAppKeys, readAppKeys } = await import("../src/app-keys.js");
 const Fastify = (await import("fastify")).default;
 
@@ -75,6 +75,8 @@ interface Box {
   ip?: string;
   ports?: number[];
   webui?: string;
+  /** Container port to host bindings, as docker inspect reports them under NetworkSettings.Ports. */
+  publish?: Record<number, Array<{ HostIp: string; HostPort: string }>>;
 }
 
 function inspectJson(b: Box): Record<string, unknown> {
@@ -87,7 +89,10 @@ function inspectJson(b: Box): Record<string, unknown> {
       Labels: b.webui !== undefined ? { "net.unraid.docker.webui": b.webui } : {},
     },
     HostConfig: { NetworkMode: network },
-    NetworkSettings: { Networks: network === "host" ? { host: {} } : { [network]: { IPAddress: b.ip ?? "127.0.0.1" } } },
+    NetworkSettings: {
+      Networks: network === "host" ? { host: {} } : { [network]: { IPAddress: b.ip ?? "127.0.0.1" } },
+      Ports: Object.fromEntries(Object.entries(b.publish ?? {}).map(([p, v]) => [`${p}/tcp`, v])),
+    },
   };
 }
 
@@ -254,6 +259,37 @@ test("a host-network container is reached on loopback", () => {
   const r = resolveContainer(inspectJson({ name: "ha", network: "host", webui: "http://[IP]:[PORT:8123]" }));
   assert.equal(r.host, "127.0.0.1");
   assert.equal(r.webuiPort, 8123);
+});
+
+test("a published port is used before the container's own IP, so apps that check the host name answer", async () => {
+  await setPermissions({ "apps:read": true });
+  // The container IP is unroutable on purpose: only the published loopback port reaches the stand-in app.
+  const { app } = await harness([
+    { name: "sonarr", ip: "192.0.2.1", ports: [8989], webui: "http://[IP]:[PORT:8989]/", publish: { 8989: [{ HostIp: "0.0.0.0", HostPort: String(appPort) }, { HostIp: "::", HostPort: String(appPort) }] } },
+  ]);
+  const res = (await call(app, "sonarr", { path: "/echo" })).json().data;
+  assert.equal(res.status, 200);
+  assert.equal(res.url, `http://127.0.0.1:${appPort}/echo`);
+  assert.equal(seen.at(-1)?.headers.host, `127.0.0.1:${appPort}`);
+  const listed = (await app.inject({ method: "GET", url: "/api/apps" })).json().data.apps;
+  assert.equal(listed[0].baseUrl, `http://127.0.0.1:${appPort}`);
+});
+
+test("only usable IPv4 bindings count as published, and an unpublished port still goes to the container", () => {
+  const r = resolveContainer(inspectJson({
+    name: "x", ip: "172.17.0.9", ports: [80, 81, 82, 83],
+    publish: {
+      80: [{ HostIp: "::", HostPort: "8080" }],
+      81: [{ HostIp: "192.168.1.45", HostPort: "8181" }],
+      82: [{ HostIp: "0.0.0.0", HostPort: "" }],
+    },
+  }));
+  assert.deepEqual([...r.published.entries()], [[81, { host: "192.168.1.45", port: 8181 }]]);
+  assert.deepEqual(addressFor(r, 80), { host: "172.17.0.9", port: 80 });
+  assert.deepEqual(addressFor(r, 81), { host: "192.168.1.45", port: 8181 });
+  assert.deepEqual(addressFor(r, 83), { host: "172.17.0.9", port: 83 });
+  const ha = resolveContainer(inspectJson({ name: "ha", network: "host", publish: { 8123: [{ HostIp: "0.0.0.0", HostPort: "9999" }] } }));
+  assert.deepEqual(addressFor(ha, 8123), { host: "127.0.0.1", port: 8123 });
 });
 
 test("a container sharing another's network, a stopped one and an unknown one are refused", async () => {
