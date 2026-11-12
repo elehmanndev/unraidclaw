@@ -13,7 +13,7 @@ interface McpActivity {
   api?: ApiCall;
 }
 
-const KNOWN_METHODS = new Set(["initialize", "ping", "tools/list", "tools/call"]);
+const KNOWN_METHODS = new Set(["initialize", "ping", "tools/list", "tools/call", "resources/list", "resources/read"]);
 const activity = new WeakMap<FastifyRequest, McpActivity>();
 
 function entry(request: FastifyRequest): McpActivity {
@@ -44,7 +44,7 @@ export function recordMcpApiCall(request: FastifyRequest, method: string, url: s
 // Every client connection sends these before its first tool call, and most
 // clients also try GET for a stream they are refused. Logging them buried the
 // tool calls, so only their failures are recorded.
-const HANDSHAKE = new Set(["initialize", "ping", "tools/list", "notification"]);
+const HANDSHAKE = new Set(["initialize", "ping", "tools/list", "resources/list", "resources/read", "notification"]);
 
 /**
  * JSON-RPC reports tool failures inside an HTTP 200 response, so a tool call's

@@ -120,6 +120,16 @@ $certificateReadable = $certificate['present'] && !isset($certificate['error']);
           </td>
         </tr>
         <tr>
+          <td>MCP Apps previews:</td>
+          <td>
+            <select name="MCP_APPS_ENABLED">
+              <option value="no" <?=($cfg['MCP_APPS_ENABLED'] ?? 'no') !== 'yes' ? 'selected' : ''?>>No</option>
+              <option value="yes" <?=($cfg['MCP_APPS_ENABLED'] ?? 'no') === 'yes' ? 'selected' : ''?>>Yes</option>
+            </select>
+            <span class="occ-hint">In clients that support MCP Apps, such as Claude, show dry runs as a preview card with an Apply button. Needs MCP enabled. Off by default.</span>
+          </td>
+        </tr>
+        <tr>
           <td>Listen Port:</td>
           <td>
             <input type="number" name="PORT" value="<?=$cfg['PORT'] ?? '9876'?>" min="1024" max="65535">

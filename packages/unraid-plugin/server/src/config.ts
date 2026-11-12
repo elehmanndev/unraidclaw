@@ -4,6 +4,8 @@ import { type PermissionMatrix, createDefaultMatrix } from "@unraidclaw/shared";
 
 export interface ServerConfig {
   mcpEnabled: boolean;
+  /** MCP Apps views. Only takes effect when mcpEnabled is also true. */
+  mcpAppsEnabled: boolean;
   port: number;
   host: string;
   apiKeyHash: string;
@@ -52,6 +54,7 @@ export function loadConfig(): ServerConfig {
   const tlsDir = join(FLASH_BASE, "tls");
   return {
     mcpEnabled: (cfg.MCP_ENABLED ?? process.env.OCC_MCP_ENABLED ?? "no") === "yes",
+    mcpAppsEnabled: (cfg.MCP_APPS_ENABLED ?? process.env.OCC_MCP_APPS_ENABLED ?? "no") === "yes",
     port: parseInt(cfg.PORT ?? process.env.OCC_PORT ?? "9876", 10),
     host: cfg.HOST ?? process.env.OCC_HOST ?? "0.0.0.0",
     apiKeyHash: cfg.API_KEY_HASH ?? process.env.OCC_API_KEY_HASH ?? "",

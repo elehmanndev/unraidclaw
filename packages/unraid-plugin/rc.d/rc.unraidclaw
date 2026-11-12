@@ -118,6 +118,7 @@ start() {
   export OCC_TLS_CERT="${TLS_CERT:-$TLS_DIR/cert.pem}"
   export OCC_TLS_KEY="${TLS_KEY:-$TLS_DIR/key.pem}"
   export OCC_MCP_ENABLED="${MCP_ENABLED:-no}"
+  export OCC_MCP_APPS_ENABLED="${MCP_APPS_ENABLED:-no}"
   export OCC_PORT="${PORT:-9876}"
   export OCC_HOST="${HOST:-0.0.0.0}"
   export OCC_API_KEY_HASH="${API_KEY_HASH:-}"

@@ -2,6 +2,7 @@ import Ajv from "ajv";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { registerTools, isErrorResult, READ_ONLY, type ToolClient, type ToolDefinition, type ToolOptions } from "unraidclaw/tools";
 import type { ApiResponse } from "@unraidclaw/shared";
+import { DRY_RUN_VIEW_URI, usesDryRunView } from "./mcp-apps.js";
 import { recordMcpApiCall } from "./mcp-log.js";
 import { mcpApiKey } from "./mcp-security.js";
 
@@ -37,7 +38,7 @@ function injectedClient(app: FastifyInstance, request: FastifyRequest): ToolClie
   };
 }
 
-export function createMcpTools(app: FastifyInstance) {
+export function createMcpTools(app: FastifyInstance, { apps = false }: { apps?: boolean } = {}) {
   // Schema discovery never executes a tool. Per-request closures below keep
   // credentials and execution failures isolated between concurrent clients.
   const unavailable = async (): Promise<never> => { throw new Error("No request context"); };
@@ -57,6 +58,7 @@ export function createMcpTools(app: FastifyInstance) {
       description: tool.description,
       inputSchema,
       annotations: { readOnlyHint: readOnly, destructiveHint: !readOnly },
+      ...(apps && usesDryRunView(inputSchema, readOnly) ? { _meta: { ui: { resourceUri: DRY_RUN_VIEW_URI } } } : {}),
     };
   });
   const validators = new Map(tools.map((tool) => [tool.name, ajv.compile(tool.inputSchema)]));

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { recordMcpMethod, recordMcpTool } from "../mcp-log.js";
+import { DRY_RUN_VIEW, DRY_RUN_VIEW_URI, readDryRunView } from "../mcp-apps.js";
 import { createMcpTools } from "../mcp-tools.js";
 
 export const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"];
@@ -13,8 +14,9 @@ function error(id: string | number | null, code: number, message: string) {
   return { jsonrpc: "2.0", id, error: { code, message } };
 }
 
-export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
-  const tools = createMcpTools(app);
+export async function registerMcpRoutes(app: FastifyInstance, options: { apps?: boolean } = {}): Promise<void> {
+  const apps = options.apps === true;
+  const tools = createMcpTools(app, { apps });
 
   // Encapsulated parsing keeps REST JSON parsing and error envelopes unchanged.
   app.removeContentTypeParser("application/json");
@@ -76,7 +78,8 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
           || typeof params.clientInfo.version !== "string") return fail(-32602, "Invalid initialize params");
         return result({
           protocolVersion: SUPPORTED_PROTOCOL_VERSIONS.includes(params.protocolVersion) ? params.protocolVersion : MCP_PROTOCOL_VERSION,
-          capabilities: { tools: {} },
+          // resources only carries the MCP Apps view, so it is declared only with it.
+          capabilities: apps ? { tools: {}, resources: {} } : { tools: {} },
           serverInfo: { name: "unraidclaw", version: process.env.OCC_VERSION || "dev" },
         });
       case "ping":
@@ -91,6 +94,16 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
         if (!tools.has(params.name)) return fail(-32602, "Unknown tool");
         recordMcpTool(request, params.name);
         return result(await tools.call(params.name, (params.arguments ?? {}) as Record<string, unknown>, request));
+      case "resources/list":
+        if (!apps) return fail(-32601, "Method not found");
+        if (params.cursor !== undefined) return fail(-32602, "Invalid cursor: resources are returned in one page");
+        return result({ resources: [DRY_RUN_VIEW] });
+      case "resources/read":
+        if (!apps) return fail(-32601, "Method not found");
+        if (typeof params.uri !== "string") return fail(-32602, "Invalid resources/read params");
+        // -32002 is the MCP code for an unknown resource. The URI is not echoed.
+        if (params.uri !== DRY_RUN_VIEW_URI) return fail(-32002, "Resource not found");
+        return result(readDryRunView());
       default:
         return fail(-32601, "Method not found");
     }

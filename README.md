@@ -562,7 +562,7 @@ A client that cannot trust the certificate can use the same mcp-remote command a
 
 Supported protocol versions are `2025-11-25`, `2025-06-18` and `2025-03-26`. Initialization echoes a supported version or returns the latest for an unknown version. Send `Content-Type: application/json`, `Accept: application/json, text/event-stream` and the negotiated `MCP-Protocol-Version` header. An absent version header defaults to `2025-03-26`; an unsupported value returns HTTP 400 with JSON-RPC error `-32600` listing the supported versions.
 
-The transport uses stateless JSON responses without SSE or sessions. It supports `initialize`, `ping`, `tools/list` and `tools/call`; notifications receive HTTP 202 with an empty body. Batches are rejected with `-32600` for every version, including `2025-03-26`.
+The transport uses stateless JSON responses without SSE or sessions. It supports `initialize`, `ping`, `tools/list` and `tools/call`, plus `resources/list` and `resources/read` with [MCP Apps previews](#mcp-apps-previews) on; notifications receive HTTP 202 with an empty body. Batches are rejected with `-32600` for every version, including `2025-03-26`.
 
 | Method | Endpoint | Availability and permissions |
 |--------|----------|------------------------------|
@@ -573,9 +573,17 @@ The transport uses stateless JSON responses without SSE or sessions. It supports
 
 The endpoint exposes the same 71 tools as the OpenClaw plugin, without OpenClaw's `server` argument. Read-only tools carry `readOnlyHint`; every other tool carries `destructiveHint`. Each call runs through the gateway's own `/api/` route in process, so the permission matrix, body validation, dry-run rules and blockers apply unchanged. OpenClaw keeps using `/api/*` whether MCP is on or off.
 
+### MCP Apps previews
+
+Clients that support [MCP Apps](https://modelcontextprotocol.io/extensions/apps), such as Claude on the web and desktop, can show a dry run as a preview card instead of plain text. It is off by default: set **MCP Apps previews** to **Yes** in **Settings > UnraidClaw > Settings**, which writes `MCP_APPS_ENABLED="yes"` to the cfg. It only takes effect while MCP is enabled; when the cfg has no value, the server also accepts `OCC_MCP_APPS_ENABLED="yes"` from its environment.
+
+When it is on, `initialize` also declares the `resources` capability, `resources/list` returns one resource, `ui://unraidclaw/dry-run` with MIME type `text/html;profile=mcp-app`, and `resources/read` returns its HTML. An unknown URI returns error `-32002`. Every tool that is not read-only and takes a `dryRun` parameter, such as `unraid_ca_install`, `unraid_template_edit`, `unraid_compose_edit` or `unraid_docker_prune_images`, carries `_meta.ui.resourceUri` pointing to it. When it is off, these methods return `-32601` and no tool carries `_meta`.
+
+The card shows the blockers, warnings, changes, diff and command from the result, and the full response. After a dry run without blockers it offers **Apply**, which needs a second click to confirm and then asks the client to repeat the same call with `dryRun: false`. That call comes back to `/mcp` with the same API key, so the permission matrix and every check of the route still apply; the card cannot do anything the key cannot. The view builds its content as text, never as HTML, and loads nothing from the network, so the client keeps its most restrictive content policy. Clients without MCP Apps ignore the metadata and get the same text result as before.
+
 ### Activity log
 
-A tool call writes one entry for `/mcp` with the tool name in `tool`, and takes `resource`, `action` and `statusCode` from the `/api/` route the tool ran, so a call refused by the permission matrix shows 403 even though the MCP response itself is HTTP 200. The route also gets its own entry, with its full path, except for `/api/health`. A tool call rejected before it reached a route, for example over invalid arguments, keeps resource `mcp` and action `tools/call`. Successful `initialize`, notifications, `ping` and `tools/list` requests are omitted from the activity log. Their failures are logged with the method as the action; notification methods use action `notification`. GET and DELETE responses with status 405 are also omitted. A request refused before its method was read, such as one with a missing key or malformed JSON, uses action `rejected`. The Activity Log tab and the Recent Activity card on the Dashboard show the tool name, or for other `/mcp` entries the action, after the path.
+A tool call writes one entry for `/mcp` with the tool name in `tool`, and takes `resource`, `action` and `statusCode` from the `/api/` route the tool ran, so a call refused by the permission matrix shows 403 even though the MCP response itself is HTTP 200. The route also gets its own entry, with its full path, except for `/api/health`. A tool call rejected before it reached a route, for example over invalid arguments, keeps resource `mcp` and action `tools/call`. Successful `initialize`, notifications, `ping`, `tools/list`, `resources/list` and `resources/read` requests are omitted from the activity log. Their failures are logged with the method as the action; notification methods use action `notification`. GET and DELETE responses with status 405 are also omitted. A request refused before its method was read, such as one with a missing key or malformed JSON, uses action `rejected`. The Activity Log tab and the Recent Activity card on the Dashboard show the tool name, or for other `/mcp` entries the action, after the path.
 
 ### Origin
 

@@ -34,6 +34,9 @@ test("WebGUI and service wiring keep MCP off by default and retain GET settings 
   const page = await readFile(new URL("unraidclaw.page", base), "utf8");
   assert.match(page, /<select name="MCP_ENABLED">[\s\S]*?<option value="no"[\s\S]*?<option value="yes"/);
   assert.match(page, /Expose MCP at \/mcp/);
+  assert.match(await readFile(new URL("default.cfg", base), "utf8"), /^MCP_APPS_ENABLED="no"$/m);
+  assert.match(page, /<select name="MCP_APPS_ENABLED">[\s\S]*?<option value="no"[\s\S]*?<option value="yes"/);
+  assert.match(await readFile(new URL("../../rc.d/rc.unraidclaw", import.meta.url), "utf8"), /export OCC_MCP_APPS_ENABLED="\$\{MCP_APPS_ENABLED:-no\}"/);
   assert.match(await readFile(new URL("../../rc.d/rc.unraidclaw", import.meta.url), "utf8"), /export OCC_MCP_ENABLED="\$\{MCP_ENABLED:-no\}"/);
   assert.match(await readFile(new URL("javascript/unraidclaw.js", base), "utf8"), /save-settings\.php\?/);
 });
@@ -108,4 +111,34 @@ test("settings PHP reports a service that is not in the requested state and skip
   assert.equal(unwritable.saved, false);
   assert.match(unwritable.error, /service was not changed/);
   await assert.rejects(readFile(command), { code: "ENOENT" });
+});
+
+test("MCP Apps previews are opt-in, accept only yes, and cfg takes precedence over env", async () => {
+  delete process.env.OCC_MCP_APPS_ENABLED;
+  await writeFile(cfgFile, "");
+  assert.equal(loadConfig().mcpAppsEnabled, false);
+  for (const value of ["yes", "no", "true", "1", ""]) {
+    process.env.OCC_MCP_APPS_ENABLED = value;
+    assert.equal(loadConfig().mcpAppsEnabled, value === "yes");
+  }
+  process.env.OCC_MCP_APPS_ENABLED = "yes";
+  await writeFile(cfgFile, 'MCP_APPS_ENABLED="no"\n');
+  assert.equal(loadConfig().mcpAppsEnabled, false);
+  delete process.env.OCC_MCP_APPS_ENABLED;
+});
+
+test("settings PHP rejects malformed MCP Apps values before writes and persists yes/no", { skip: !phpAvailable && "PHP CLI unavailable" }, async () => {
+  const script = await settingsScript();
+  for (const value of ["yes", "no", "true", "", ["yes"], true, 'yes"\nSERVICE="enable']) {
+    await writeFile(cfgFile, 'SERVICE="enable"\nMCP_APPS_ENABLED="no"\n');
+    await rm(command, { force: true });
+    const output = save(script, { MCP_APPS_ENABLED: value });
+    const valid = value === "yes" || value === "no";
+    assert.equal(output.success, valid);
+    if (valid) assert.match(await readFile(cfgFile, "utf8"), new RegExp(`MCP_APPS_ENABLED="${value}"`));
+    else {
+      assert.equal(await readFile(cfgFile, "utf8"), 'SERVICE="enable"\nMCP_APPS_ENABLED="no"\n');
+      await assert.rejects(readFile(command), { code: "ENOENT" });
+    }
+  }
 });

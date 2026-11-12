@@ -30,7 +30,7 @@ UnraidClaw gives AI agents 71 tools across 18 categories to monitor and manage a
 - **Logs** - Read syslog entries
 - **Health** - Server health check
 
-Tools use a 40-key permission matrix (resource:action) configurable from the Unraid WebGUI; health requires no permission. Activity logging excludes the public health probe, successful MCP handshakes and MCP GET/DELETE responses with status 405. The gateway also has an optional MCP endpoint, off by default, that exposes the same tools to MCP clients; this plugin does not use it.
+Tools use a 40-key permission matrix (resource:action) configurable from the Unraid WebGUI; health requires no permission. Activity logging excludes the public health probe, successful MCP handshakes and MCP GET/DELETE responses with status 405. The gateway also has an optional MCP endpoint, off by default, that exposes the same tools to MCP clients, optionally with MCP Apps preview cards for dry runs; this plugin does not use it.
 
 ## Updating and removing an installed app
 

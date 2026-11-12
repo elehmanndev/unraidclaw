@@ -140,7 +140,7 @@ export function createServer(config: ServerConfig, httpsOpts?: { cert: Buffer; k
   registerNetworkRoutes(app, gql);
   registerUserRoutes(app, gql);
   registerLogRoutes(app, gql);
-  if (config.mcpEnabled) app.register(registerMcpRoutes);
+  if (config.mcpEnabled) app.register(registerMcpRoutes, { apps: config.mcpAppsEnabled });
 
   return app;
 }

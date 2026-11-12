@@ -3,7 +3,7 @@
 $plugin = 'unraidclaw';
 $cfgFile = "/boot/config/plugins/{$plugin}/unraidclaw.cfg";
 
-$fields = ['SERVICE', 'MCP_ENABLED', 'PORT', 'HOST', 'GRAPHQL_URL', 'UNRAID_API_KEY', 'MAX_LOG_SIZE'];
+$fields = ['SERVICE', 'MCP_ENABLED', 'MCP_APPS_ENABLED', 'PORT', 'HOST', 'GRAPHQL_URL', 'UNRAID_API_KEY', 'MAX_LOG_SIZE'];
 
 // Accept from GET query params or POST body
 $input = !empty($_GET) ? $_GET : $_POST;
@@ -21,6 +21,14 @@ if (array_key_exists('MCP_ENABLED', $input) && !in_array($input['MCP_ENABLED'], 
     echo $isAjax
         ? json_encode(['success' => false, 'error' => 'MCP_ENABLED must be yes or no'])
         : 'MCP_ENABLED must be yes or no';
+    exit;
+}
+
+if (array_key_exists('MCP_APPS_ENABLED', $input) && !in_array($input['MCP_APPS_ENABLED'], ['yes', 'no'], true)) {
+    http_response_code(400);
+    echo $isAjax
+        ? json_encode(['success' => false, 'error' => 'MCP_APPS_ENABLED must be yes or no'])
+        : 'MCP_APPS_ENABLED must be yes or no';
     exit;
 }
 

@@ -14,6 +14,8 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" support="https://github.com/elehmanndev/unraidclaw" description="Permission-enforcing REST API and MCP gateway that allows AI agents to manage your Unraid server with fine-grained access control.">
 
 <CHANGES>
+### Unreleased
+- Add MCP Apps previews, off by default. With **MCP Apps previews** set to Yes, clients that support MCP Apps, such as Claude on the web and desktop, show the dry run of an install, update, container edit, compose change, image prune or plugin change as a card with its blockers, warnings, diff and command. After a dry run without blockers the card offers an Apply button that needs a second click and repeats the same call with dryRun false, through the same API key and permissions. The gateway serves the card as the resource ui://unraidclaw/dry-run through resources/list and resources/read. Other clients keep getting the same text results
 ### 0.3.2
 - Fix app requests to Sonarr, Radarr and other apps that reject a host name they do not know with Invalid Hostname. A request now goes to the port the host publishes for the app when it has one, on loopback, and to the container IP only when the port is not published
 ### 0.3.1

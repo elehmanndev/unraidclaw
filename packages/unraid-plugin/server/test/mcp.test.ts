@@ -34,8 +34,8 @@ async function permissions(matrix: Record<string, boolean>) {
   loadPermissions();
 }
 
-function harness(t: { after(fn: () => Promise<void>): void }, mcpEnabled = true) {
-  const app = createServer({ ...config, mcpEnabled });
+function harness(t: { after(fn: () => Promise<void>): void }, mcpEnabled = true, mcpAppsEnabled = false) {
+  const app = createServer({ ...config, mcpEnabled, mcpAppsEnabled });
   app.log.level = "silent";
   t.after(() => app.close());
   return app;
@@ -340,4 +340,124 @@ test("shared registry preserves OpenClaw failures and multi-server resolution", 
   assert(isErrorResult(invalid));
   assert.match(invalid.content[0].text, /Did you mean "dryRun"/);
   assert.equal(selected.length, 1);
+});
+
+const { DRY_RUN_VIEW_URI, MCP_APP_MIME_TYPE } = await import("../src/mcp-apps.js");
+
+test("MCP Apps stay out of the protocol unless enabled", async (t) => {
+  const app = harness(t);
+  const initialized = await app.inject({ method: "POST", url: "/mcp", headers, payload: rpc("initialize", init) });
+  assert.deepEqual(initialized.json().result.capabilities, { tools: {} });
+  const list = await app.inject({ method: "POST", url: "/mcp", headers, payload: rpc("tools/list") });
+  assert(list.json().result.tools.every((tool: any) => tool._meta === undefined));
+  for (const payload of [rpc("resources/list"), rpc("resources/read", { uri: DRY_RUN_VIEW_URI })]) {
+    const res = await app.inject({ method: "POST", url: "/mcp", headers, payload });
+    assert.equal(res.json().error.code, -32601);
+  }
+});
+
+test("MCP Apps attach the dry-run view to mutating dryRun tools only and serve it as a resource", async (t) => {
+  const app = harness(t, true, true);
+  const initialized = await app.inject({ method: "POST", url: "/mcp", headers, payload: rpc("initialize", init) });
+  assert.deepEqual(initialized.json().result.capabilities, { tools: {}, resources: {} });
+  const tools = (await app.inject({ method: "POST", url: "/mcp", headers, payload: rpc("tools/list") })).json().result.tools;
+  const withView = tools.filter((tool: any) => tool._meta?.ui?.resourceUri === DRY_RUN_VIEW_URI).map((tool: any) => tool.name);
+  for (const name of ["unraid_ca_install", "unraid_ca_update", "unraid_ca_remove", "unraid_template_edit", "unraid_compose_edit", "unraid_compose_action", "unraid_docker_prune_images", "unraid_plugin_install"]) {
+    assert(withView.includes(name), name);
+  }
+  for (const tool of tools) {
+    if (!withView.includes(tool.name)) continue;
+    assert.equal(tool.annotations.readOnlyHint, false, tool.name);
+    assert(tool.inputSchema.properties.dryRun, tool.name);
+  }
+  for (const name of ["unraid_docker_list", "unraid_docker_stop", "unraid_system_reboot", "unraid_ca_app"]) {
+    assert(!withView.includes(name), name);
+  }
+
+  const listed = (await app.inject({ method: "POST", url: "/mcp", headers, payload: rpc("resources/list") })).json().result.resources;
+  assert.deepEqual(listed.map((r: any) => [r.uri, r.mimeType]), [[DRY_RUN_VIEW_URI, MCP_APP_MIME_TYPE]]);
+  const read = (await app.inject({ method: "POST", url: "/mcp", headers, payload: rpc("resources/read", { uri: DRY_RUN_VIEW_URI }) })).json().result;
+  assert.equal(read.contents.length, 1);
+  assert.equal(read.contents[0].mimeType, MCP_APP_MIME_TYPE);
+  assert.match(read.contents[0].text, /^<!DOCTYPE html>/);
+  // No network access is requested, so the host keeps its restrictive default CSP.
+  assert.equal(read.contents[0]._meta.ui.csp, undefined);
+  assert.doesNotMatch(read.contents[0].text, /https?:\/\/|innerHTML|insertAdjacentHTML|eval\(/);
+
+  for (const [params, code] of [[{ uri: "ui://unraidclaw/other" }, -32002], [{}, -32602], [{ uri: 1 }, -32602]] as const) {
+    const res = await app.inject({ method: "POST", url: "/mcp", headers, payload: rpc("resources/read", params) });
+    assert.equal(res.json().error.code, code);
+    assert.doesNotMatch(res.body, /other/);
+  }
+  assert.equal((await app.inject({ method: "POST", url: "/mcp", headers, payload: rpc("resources/list", { cursor: "x" }) })).json().error.code, -32602);
+  // The view only changes presentation: a mistyped dryRun is still refused before any request.
+  const bad = await app.inject({ method: "POST", url: "/mcp", headers, payload: rpc("tools/call", { name: "unraid_ca_install", arguments: { name: "fixture", dryRun: "true" } }) });
+  assert.equal(bad.json().result.isError, true);
+});
+
+test("the dry-run view renders text safely and applies only after two clicks with dryRun false", async (t) => {
+  const app = harness(t, true, true);
+  const html = (await app.inject({ method: "POST", url: "/mcp", headers, payload: rpc("resources/read", { uri: DRY_RUN_VIEW_URI }) })).json().result.contents[0].text as string;
+  const script = html.match(/<script>([\s\S]*)<\/script>/)![1];
+  const { runInNewContext } = await import("node:vm");
+
+  // A minimal DOM: just enough for the view, with textContent only, so any use
+  // of an HTML-parsing API would throw.
+  class Node {
+    children: Node[] = []; hidden = false; disabled = false; className = ""; textContent = ""; listeners: Record<string, Function> = {};
+    style: any = { setProperty() {} };
+    constructor(public tag: string, public id = "") {}
+    appendChild(child: Node) { this.children.push(child); return child; }
+    addEventListener(type: string, fn: Function) { this.listeners[type] = fn; }
+    click() { this.listeners.click.call(this); }
+    text(): string { return this.textContent + this.children.map((c) => c.text()).join(" "); }
+  }
+  const ids: Record<string, Node> = {};
+  for (const id of ["title", "badge", "body", "actions", "apply", "cancel", "note"]) ids[id] = new Node("div", id);
+  ids.actions.hidden = true; ids.badge.hidden = true;
+  const sent: any[] = [];
+  const parent = { postMessage: (message: any) => sent.push(message) };
+  let onMessage: Function = () => {};
+  const window: any = { parent, addEventListener: (_: string, fn: Function) => { onMessage = fn; } };
+  const document: any = {
+    getElementById: (id: string) => ids[id],
+    createElement: (tag: string) => new Node(tag),
+    documentElement: new Node("html"), body: new Node("body"),
+  };
+  const deliver = async (data: unknown) => { onMessage({ source: parent, data }); await new Promise((r) => setImmediate(r)); };
+  runInNewContext(script, { window, document, ResizeObserver: class { observe() {} }, JSON, Object, Promise });
+
+  const init = sent.find((m) => m.method === "ui/initialize");
+  assert.equal(init.params.protocolVersion, "2026-01-26");
+  await deliver({ jsonrpc: "2.0", id: init.id, result: { hostContext: { theme: "dark", toolInfo: { tool: { name: "unraid_ca_install" } } } } });
+  assert(sent.some((m) => m.method === "ui/notifications/initialized"));
+
+  // A message from anywhere but the host is ignored.
+  onMessage({ source: {}, data: { jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { name: "evil", dryRun: true } } } });
+
+  await deliver({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { name: "fixture", dryRun: true } } });
+  const preview = { dryRun: true, warnings: ["<img src=x onerror=alert(1)>"], plan: { command: "docker run fixture", env: ["TOKEN=***"] } };
+  await deliver({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { content: [{ type: "text", text: JSON.stringify(preview) }] } });
+  assert.equal(ids.badge.textContent, "Dry run");
+  assert.equal(ids.actions.hidden, false);
+  assert(ids.body.text().includes("<img src=x onerror=alert(1)>"), "markup is shown as text");
+
+  ids.apply.click();
+  assert(!sent.some((m) => m.method === "tools/call"), "the first click only arms the button");
+  ids.cancel.click();
+  ids.apply.click();
+  assert(!sent.some((m) => m.method === "tools/call"), "cancel disarms");
+  ids.apply.click();
+  ids.apply.click();
+  const call = sent.find((m) => m.method === "tools/call");
+  assert.deepEqual(JSON.parse(JSON.stringify(call.params)), { name: "unraid_ca_install", arguments: { name: "fixture", dryRun: false } });
+  await deliver({ jsonrpc: "2.0", id: call.id, result: { content: [{ type: "text", text: JSON.stringify({ verified: true }) }] } });
+  assert.equal(ids.badge.textContent, "Done");
+  assert.equal(ids.actions.hidden, true, "no second apply after a real run");
+  assert(sent.some((m) => m.method === "ui/update-model-context"));
+
+  // A preview with blockers never offers Apply.
+  await deliver({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { name: "fixture", dryRun: true } } });
+  await deliver({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { content: [{ type: "text", text: JSON.stringify({ blockers: [{ code: "PRIVILEGED", message: "needs full" }] }) }] } });
+  assert.equal(ids.actions.hidden, true);
 });
